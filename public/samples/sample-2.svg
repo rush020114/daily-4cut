@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200"><rect width="1200" height="1200" fill="#fff"/><rect x="24" y="24" width="564" height="564" fill="#ffc6ff" stroke="#222" stroke-width="8"/>
+<circle cx="306" cy="306" r="124.08" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="262.572" cy="287.388" r="12.408000000000001" fill="#222"/>
+<circle cx="349.428" cy="287.388" r="12.408000000000001" fill="#222"/>
+<path d="M 256.368 343.224 Q 306 392.856 355.632 343.224" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="48" y="80" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">1</text><rect x="612" y="24" width="564" height="564" fill="#bdb2ff" stroke="#222" stroke-width="8"/>
+<circle cx="894" cy="306" r="124.08" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="850.572" cy="287.388" r="12.408000000000001" fill="#222"/>
+<circle cx="937.428" cy="287.388" r="12.408000000000001" fill="#222"/>
+<path d="M 844.3679999999999 343.224 Q 894 306 943.6320000000001 343.224" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="636" y="80" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">2</text><rect x="24" y="612" width="564" height="564" fill="#a0c4ff" stroke="#222" stroke-width="8"/>
+<circle cx="306" cy="894" r="124.08" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="262.572" cy="875.388" r="12.408000000000001" fill="#222"/>
+<circle cx="349.428" cy="875.388" r="12.408000000000001" fill="#222"/>
+<path d="M 256.368 931.224 Q 306 980.856 355.632 931.224" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="48" y="668" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">3</text><rect x="612" y="612" width="564" height="564" fill="#9bf6ff" stroke="#222" stroke-width="8"/>
+<circle cx="894" cy="894" r="124.08" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="850.572" cy="875.388" r="12.408000000000001" fill="#222"/>
+<circle cx="937.428" cy="875.388" r="12.408000000000001" fill="#222"/>
+<path d="M 844.3679999999999 931.224 Q 894 894 943.6320000000001 931.224" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="636" y="668" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">4</text></svg>

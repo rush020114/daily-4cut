@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" width="900" height="1600"><rect width="900" height="1600" fill="#fff"/><rect x="24" y="24" width="852" height="370" fill="#ffd6a5" stroke="#222" stroke-width="8"/>
+<circle cx="450" cy="209" r="81.4" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="421.51" cy="196.79" r="8.14" fill="#222"/>
+<circle cx="478.49" cy="196.79" r="8.14" fill="#222"/>
+<path d="M 417.44 233.42000000000002 Q 450 265.98 482.56 233.42000000000002" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="48" y="80" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">1</text><rect x="24" y="418" width="852" height="370" fill="#fdffb6" stroke="#222" stroke-width="8"/>
+<circle cx="450" cy="603" r="81.4" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="421.51" cy="590.79" r="8.14" fill="#222"/>
+<circle cx="478.49" cy="590.79" r="8.14" fill="#222"/>
+<path d="M 417.44 627.42 Q 450 603 482.56 627.42" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="48" y="474" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">2</text><rect x="24" y="812" width="852" height="370" fill="#caffbf" stroke="#222" stroke-width="8"/>
+<circle cx="450" cy="997" r="81.4" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="421.51" cy="984.79" r="8.14" fill="#222"/>
+<circle cx="478.49" cy="984.79" r="8.14" fill="#222"/>
+<path d="M 417.44 1021.42 Q 450 1053.98 482.56 1021.42" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="48" y="868" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">3</text><rect x="24" y="1206" width="852" height="370" fill="#9bf6ff" stroke="#222" stroke-width="8"/>
+<circle cx="450" cy="1391" r="81.4" fill="#fff" stroke="#222" stroke-width="6"/>
+<circle cx="421.51" cy="1378.79" r="8.14" fill="#222"/>
+<circle cx="478.49" cy="1378.79" r="8.14" fill="#222"/>
+<path d="M 417.44 1415.42 Q 450 1391 482.56 1415.42" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round"/>
+<text x="48" y="1262" font-family="sans-serif" font-size="44" font-weight="700" fill="#222">4</text></svg>
