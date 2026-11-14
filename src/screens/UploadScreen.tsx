@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchConfig, uploadComic } from '../api'
+import { ApiError, fetchConfig, uploadComic } from '../api'
 import Turnstile from '../components/Turnstile'
+import { formatReport, STAGE_LABEL, type ErrorReport, type Stage } from '../lib/diagnostics'
 import { ACCEPTED_TYPES, LIMITS, TERMS_VERSION } from '../lib/limits'
-import { ImageError, toWebp, type WebpResult } from '../lib/toWebp'
+import { ImageError, readFileBytes, toWebp, type WebpResult } from '../lib/toWebp'
 
 type Picked = { previewUrl: string; name: string; originalSize: number; webp: WebpResult | null }
 
@@ -17,12 +18,14 @@ type Props = { onBack: () => void }
 export default function UploadScreen({ onBack }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const pickSeq = useRef(0)
+  const errorRef = useRef<HTMLDivElement>(null)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [converting, setConverting] = useState(false)
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [agreed, setAgreed] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ErrorReport | null>(null)
+  const [copied, setCopied] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -48,30 +51,44 @@ export default function UploadScreen({ onBack }: Props) {
     }
   }, [picked?.previewUrl])
 
-  const onCaptchaError = useCallback((message: string) => setError(message), [])
+  // 오류가 화면 밖(아래쪽)에 뜨면 못 보고 지나치므로 보이는 곳으로 스크롤한다
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [error])
+
+  const fail = useCallback((message: string, stage: Stage, detail = '') => {
+    setCopied(false)
+    setError({ message, stage, detail })
+  }, [])
+  const onCaptchaError = useCallback((message: string) => fail(message, 'captcha', 'turnstile widget'), [fail])
 
   async function handleFile(file: File) {
-    setError('')
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError('JPG, PNG, WebP 형식만 올릴 수 있어요. 다른 파일을 선택해 주세요.')
-      return
-    }
-    if (file.size > LIMITS.maxInputBytes) {
-      setError(`파일이 너무 커요 (${formatSize(file.size)}). 15MB 이하로 줄여서 다시 선택해 주세요.`)
-      return
-    }
-
+    setError(null)
+    // 먼저 파일 내용을 메모리로 복사한다. (안드로이드에서는 고른 파일 참조가 나중에 읽히지 않는 경우가 있다)
     const seq = ++pickSeq.current
-    setPicked({ previewUrl: URL.createObjectURL(file), name: file.name, originalSize: file.size, webp: null })
     setConverting(true)
+    let previewUrl = ''
     try {
-      const webp = await toWebp(file)
+      const bytes = await readFileBytes(file)
+      if (seq !== pickSeq.current) return
+      if (!ACCEPTED_TYPES.includes(file.type)) {
+        throw new ImageError('JPG, PNG, WebP 형식만 올릴 수 있어요. 다른 파일을 선택해 주세요.', 'check', `type=${file.type || '(없음)'} name=${file.name}`)
+      }
+      if (bytes.length > LIMITS.maxInputBytes) {
+        throw new ImageError(`파일이 너무 커요 (${formatSize(bytes.length)}). 15MB 이하로 줄여서 다시 선택해 주세요.`, 'check', `size=${bytes.length}`)
+      }
+
+      previewUrl = URL.createObjectURL(new Blob([bytes as BlobPart], { type: file.type }))
+      setPicked({ previewUrl, name: file.name, originalSize: bytes.length, webp: null })
+      const webp = await toWebp(bytes, file.type)
       if (seq !== pickSeq.current) return
       setPicked((p) => (p ? { ...p, webp } : p))
     } catch (e) {
       if (seq !== pickSeq.current) return
       setPicked(null)
-      setError(e instanceof ImageError ? e.message : '이미지를 변환하지 못했어요. 다른 이미지로 시도해 주세요.')
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (e instanceof ImageError) fail(e.message, e.stage, e.detail)
+      else fail('이미지를 준비하지 못했어요. 다른 이미지로 시도해 주세요.', 'decode', String(e))
     } finally {
       if (seq === pickSeq.current) setConverting(false)
     }
@@ -79,10 +96,12 @@ export default function UploadScreen({ onBack }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    if (!picked?.webp) return setError(converting ? '이미지를 준비하는 중이에요. 잠시만 기다려 주세요.' : '4컷 만화 이미지를 먼저 선택해 주세요.')
-    if (!agreed) return setError('약관에 동의해야 올릴 수 있어요.')
-    if (!captchaToken) return setError('봇이 아닌지 확인하는 중이에요. 잠시 후 다시 눌러 주세요.')
+    setError(null)
+    if (!picked?.webp) {
+      return fail(converting ? '이미지를 준비하는 중이에요. 잠시만 기다려 주세요.' : '4컷 만화 이미지를 먼저 선택해 주세요.', 'check', 'no image')
+    }
+    if (!agreed) return fail('약관에 동의해야 올릴 수 있어요.', 'check', 'terms not checked')
+    if (!captchaToken) return fail('봇이 아닌지 확인하는 중이에요. 잠시 후 다시 눌러 주세요.', 'captcha', 'no token yet')
 
     const form = new FormData()
     form.set('image', picked.webp.blob, 'comic.webp')
@@ -96,7 +115,12 @@ export default function UploadScreen({ onBack }: Props) {
       await uploadComic(form)
       setDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '업로드하지 못했어요. 잠시 후 다시 시도해 주세요.')
+      const message = err instanceof Error ? err.message : '업로드하지 못했어요. 잠시 후 다시 시도해 주세요.'
+      const detail =
+        err instanceof ApiError
+          ? `HTTP ${err.status} ${String(err.body?.error ?? '')} | webp=${picked.webp.blob.size}B ${picked.webp.width}x${picked.webp.height}`
+          : String(err)
+      fail(message, 'upload', detail)
     } finally {
       // 봇 확인 토큰은 한 번만 쓸 수 있어서 결과와 상관없이 새로 받는다
       setCaptchaToken(null)
@@ -105,12 +129,28 @@ export default function UploadScreen({ onBack }: Props) {
     }
   }
 
+  // 같은 파일을 다시 골라도 change 가 일어나도록, 열기 직전에 이전 선택을 비운다
+  function openPicker() {
+    if (inputRef.current) inputRef.current.value = ''
+    inputRef.current?.click()
+  }
+
+  async function copyReport() {
+    if (!error) return
+    try {
+      await navigator.clipboard.writeText(formatReport(error))
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
+
   function reset() {
     setPicked(null)
     setNickname('')
     setEmail('')
     setAgreed(false)
-    setError('')
+    setError(null)
     setDone(false)
   }
 
@@ -203,7 +243,7 @@ export default function UploadScreen({ onBack }: Props) {
             ) : (
               <button
                 type="button"
-                onClick={() => inputRef.current?.click()}
+                onClick={openPicker}
                 className="flex aspect-[9/16] max-h-[40dvh] w-full max-w-[200px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest text-on-surface-variant transition-colors hover:bg-surface-container"
               >
                 <span className="material-symbols-outlined text-4xl">add_photo_alternate</span>
@@ -217,9 +257,9 @@ export default function UploadScreen({ onBack }: Props) {
               accept="image/png,image/jpeg,image/webp"
               className="hidden"
               onChange={(e) => {
+                // 값을 여기서 비우지 않는다: 안드로이드에서 고른 파일이 읽히지 않게 될 수 있다. 다시 고를 때 openPicker 가 비운다.
                 const file = e.target.files?.[0]
                 if (file) void handleFile(file)
-                e.target.value = ''
               }}
             />
 
@@ -234,7 +274,7 @@ export default function UploadScreen({ onBack }: Props) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => inputRef.current?.click()}
+                onClick={openPicker}
                 className="rounded bg-surface-container-highest px-3 py-1.5 font-label-md text-label-md text-on-surface transition active:scale-95 hover:bg-surface-bright disabled:opacity-50"
               >
                 {picked ? '다시 선택' : '파일 선택'}
@@ -324,10 +364,30 @@ export default function UploadScreen({ onBack }: Props) {
         )}
 
         {error && (
-          <p role="alert" className="flex items-start gap-1.5 rounded-lg bg-error-container/40 px-space-md py-2 font-body text-body-sm text-on-error-container">
-            <span className="material-symbols-outlined text-base">error</span>
-            {error}
-          </p>
+          <div
+            ref={errorRef}
+            role="alert"
+            className="flex flex-col gap-2 rounded-lg bg-error-container/40 px-space-md py-2 font-body text-body-sm text-on-error-container"
+          >
+            <p className="flex items-start gap-1.5">
+              <span className="material-symbols-outlined text-base">error</span>
+              <span>
+                {error.message}
+                <span className="mt-0.5 block font-label-sm text-label-sm opacity-80">실패한 단계: {STAGE_LABEL[error.stage]}</span>
+              </span>
+            </p>
+            <details className="font-label-sm text-label-sm opacity-90">
+              <summary className="cursor-pointer">자세한 정보</summary>
+              <p className="mt-1 font-mono break-all whitespace-pre-wrap">{formatReport(error)}</p>
+              <button
+                type="button"
+                onClick={() => void copyReport()}
+                className="mt-1.5 rounded bg-surface-container-highest px-2 py-1 text-on-surface"
+              >
+                {copied ? '복사했어요' : '복사하기'}
+              </button>
+            </details>
+          </div>
         )}
 
         <div className="flex flex-col gap-space-xs pt-space-xs">
