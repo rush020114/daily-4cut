@@ -42,6 +42,8 @@
 | `TURNSTILE_SECRET_KEY` | Secret | 봇 확인(서버) |
 | `OPENAI_API_KEY` | Secret | 업로드 이미지 AI 검수 |
 | `RESEND_API_KEY` | Secret | 알림 메일 |
+| `ACCESS_TEAM_DOMAIN` | Plaintext | 관리자 보호: Cloudflare Access 팀 도메인 (예: `xxxx.cloudflareaccess.com`) |
+| `ACCESS_AUD` | Plaintext | 관리자 보호: Access 애플리케이션 AUD 태그 |
 | `POLAR_ACCESS_TOKEN` | Secret | 결제(9단계) |
 
 ## 이미 있는 인프라
