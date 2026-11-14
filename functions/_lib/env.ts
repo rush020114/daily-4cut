@@ -6,6 +6,10 @@ export interface Env {
   SUPABASE_ANON_KEY: string
   SUPABASE_SERVICE_ROLE_KEY: string
 
+  // 관리자 API 보호. Cloudflare Access 애플리케이션을 만든 뒤 등록한다. 없으면 관리자 API는 닫혀 있다.
+  ACCESS_TEAM_DOMAIN?: string // 예: myteam.cloudflareaccess.com
+  ACCESS_AUD?: string // Access 애플리케이션의 Application Audience (AUD) 태그
+
   // 아래는 이후 단계에서 등록한다. 그 전에는 없을 수 있다.
   TURNSTILE_SITE_KEY?: string
   TURNSTILE_SECRET_KEY?: string
