@@ -52,5 +52,6 @@ export function errorResponse(e: unknown, fallbackMessage: string): Response {
   }
   if (e instanceof SupabaseError) console.error(e.message)
   else console.error(e)
-  return json({ error: 'upstream_error', message: fallbackMessage }, 502)
+  // 502 는 Cloudflare 가 자체 오류 페이지로 바꿔 버려서 메시지가 사라진다. 503 을 쓴다.
+  return json({ error: 'upstream_error', message: fallbackMessage }, 503)
 }
