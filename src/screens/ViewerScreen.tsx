@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, fetchComics, reportComic, setLike as saveLike, type Comic, type ReportReason } from '../api'
 import ReportSheet from '../components/ReportSheet'
-import { usePullToRefresh } from '../lib/usePullToRefresh'
+import { useVerticalPager } from '../lib/useVerticalPager'
 
 type Burst = { id: number; x: number; y: number }
 
@@ -28,13 +28,13 @@ function Notice({ message, onRetry }: { message: string; onRetry: () => void }) 
 }
 
 export default function ViewerScreen() {
-  const carouselRef = useRef<HTMLDivElement>(null)
   const lastTap = useRef(0)
   const burstId = useRef(0)
   const toastTimer = useRef<number | undefined>(undefined)
   const [comics, setComics] = useState<Comic[] | null>(null)
   const [loadError, setLoadError] = useState('')
   const [index, setIndex] = useState(0)
+  const [instant, setInstant] = useState(false) // true 인 동안은 넘기는 애니메이션 없이 바로 옮긴다
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [bursts, setBursts] = useState<Burst[]>([])
   const [toast, setToast] = useState('')
@@ -72,25 +72,37 @@ export default function ViewerScreen() {
     toastTimer.current = window.setTimeout(() => setToast(''), 3000)
   }
 
-  // 당겨서 새로고침: 목록과 좋아요 수를 다시 받는다. 보던 만화가 아직 있으면 그 자리에 머문다.
+  // 당겨서 새로고침(첫 편에서만): 목록과 좋아요 수를 다시 받는다. 오늘의 만화가 바뀌었으면 새 첫 편이 보인다.
   // 실패하면 화면의 기존 내용은 그대로 두고 이유만 알려 준다.
-  const currentId = comics?.[index]?.id
   async function refresh() {
     try {
       const list = await fetchComics()
-      const keep = currentId ? list.findIndex((c) => c.id === currentId) : -1
-      const next = Math.max(keep, 0)
       setComics(list)
-      setIndex(next)
-      requestAnimationFrame(() => {
-        const el = carouselRef.current
-        if (el) el.scrollTo({ left: el.clientWidth * next, behavior: 'instant' })
-      })
+      setIndex(0)
     } catch (e) {
       showToast(e instanceof Error ? e.message : '새로고침하지 못했어요. 다시 시도해 주세요.')
     }
   }
-  const ptr = usePullToRefresh(refresh, Boolean(comics?.length))
+
+  const count = comics?.length ?? 0
+  const {
+    attachViewport,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    onTouchCancel,
+    offset,
+    dragging,
+    pull,
+    refreshing,
+    triggered,
+  } = useVerticalPager({
+    count,
+    index,
+    onIndexChange: setIndex,
+    onRefresh: refresh,
+    enabled: count > 0 && !reporting,
+  })
 
   if (loadError) return <Notice message={loadError} onRetry={load} />
   if (!comics) {
@@ -105,19 +117,8 @@ export default function ViewerScreen() {
   }
 
   const comic = comics[index]
-
-  function goTo(next: number) {
-    const el = carouselRef.current
-    if (!el || !comics || next < 0 || next >= comics.length) return
-    el.scrollTo({ left: el.clientWidth * next, behavior: 'smooth' })
-  }
-
-  function handleScroll() {
-    const el = carouselRef.current
-    if (!el || !comics) return
-    const next = Math.round(el.scrollLeft / el.clientWidth)
-    if (next !== index && next >= 0 && next < comics.length) setIndex(next)
-  }
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const animate = !dragging && !instant && !reduceMotion
 
   // 먼저 화면에 반영하고, 서버가 거절하면 되돌린 뒤 이유를 알려 준다.
   async function toggleLike(target: Comic, like: boolean) {
@@ -154,13 +155,10 @@ export default function ViewerScreen() {
       if (res.hidden) {
         const at = comics!.findIndex((c) => c.id === target.id)
         const list = comics!.filter((c) => c.id !== target.id)
-        const next = Math.max(Math.min(at, list.length - 1), 0)
+        setInstant(true) // 사라진 자리에 다음 편이 애니메이션 없이 바로 온다
         setComics(list)
-        setIndex(next)
-        requestAnimationFrame(() => {
-          const el = carouselRef.current
-          if (el) el.scrollTo({ left: el.clientWidth * next, behavior: 'instant' })
-        })
+        setIndex(Math.max(Math.min(at, list.length - 1), 0))
+        requestAnimationFrame(() => requestAnimationFrame(() => setInstant(false)))
       }
       showToast('신고가 접수되었어요. 확인 후 조치할게요.')
     } catch (e) {
@@ -193,85 +191,80 @@ export default function ViewerScreen() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1 overflow-hidden" {...ptr.handlers}>
+      <div
+        ref={attachViewport}
+        className="relative min-h-0 flex-1 overflow-hidden select-none"
+        // 한 손가락 이동은 브라우저가 아니라 화면이 처리한다(넘기기·당겨서 새로고침). 두 손가락 확대는 그대로 브라우저가 처리한다.
+        style={{ touchAction: 'pinch-zoom' }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchCancel}
+      >
         {/* 당겨서 새로고침 표시. 만화가 아래로 내려오며 드러나는 자리에 보인다 */}
         <div
-          aria-hidden={!ptr.refreshing}
-          role={ptr.refreshing ? 'status' : undefined}
+          aria-hidden={!refreshing}
+          role={refreshing ? 'status' : undefined}
           className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
-          style={{ height: ptr.pull, transition: ptr.dragging ? 'none' : 'height 0.25s ease' }}
+          style={{ height: pull, transition: dragging ? 'none' : 'height 0.25s ease' }}
         >
-          {ptr.refreshing && <span className="sr-only">새로고침 중</span>}
+          {refreshing && <span className="sr-only">새로고침 중</span>}
           <span
-            className={`material-symbols-outlined text-3xl ${ptr.triggered || ptr.refreshing ? 'text-primary-container' : 'text-on-surface-variant'} ${
-              ptr.refreshing ? 'animate-spin' : ''
+            className={`material-symbols-outlined text-3xl ${triggered || refreshing ? 'text-primary-container' : 'text-on-surface-variant'} ${
+              refreshing ? 'animate-spin' : ''
             }`}
-            style={{ opacity: Math.min(ptr.pull / 40, 1), transform: ptr.refreshing ? undefined : `rotate(${ptr.pull * 4}deg)` }}
+            style={{ opacity: Math.min(pull / 40, 1), transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}
           >
             refresh
           </span>
         </div>
 
         <div
-          className="relative h-full"
-          style={{ transform: `translateY(${ptr.pull}px)`, transition: ptr.dragging ? 'none' : 'transform 0.25s ease' }}
+          className="h-full"
+          style={{ transform: `translate3d(0, ${pull}px, 0)`, transition: dragging ? 'none' : 'transform 0.25s ease' }}
         >
+          {/* 만화 한 편이 한 화면(이 영역 전체)을 채우는 세로 띠. 현재 편 번호만큼 위로 올려서 한 편씩 딱 맞게 보여 준다 */}
           <div
-            ref={carouselRef}
-            onScroll={handleScroll}
-            className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain scroll-smooth select-none"
-            // 세로 당기기는 브라우저가 가져가지 않고 화면이 처리한다. 가로 넘기기와 확대(핀치)는 그대로 브라우저가 처리한다.
-            style={{ scrollbarWidth: 'none', touchAction: 'pan-x pinch-zoom' }}
+            style={{
+              height: `${count * 100}%`,
+              transform: `translate3d(0, calc(${-index * (100 / count)}% + ${offset}px), 0)`,
+              transition: animate ? 'transform 350ms cubic-bezier(0.22, 0.8, 0.2, 1)' : 'none',
+              willChange: 'transform',
+            }}
           >
             {comics.map((c, i) => (
               <div
                 key={c.id}
+                aria-hidden={i !== index}
                 onClick={handleTap}
-                className="relative h-full w-full shrink-0 snap-center bg-surface-container-lowest"
+                className="relative w-full overflow-hidden bg-surface-container-lowest"
+                style={{ height: `${100 / count}%` }}
               >
-                <img
-                  src={c.imageUrl}
-                  alt={`오늘의 4컷 만화 ${i + 1}`}
-                  draggable={false}
-                  loading={i < 2 ? 'eager' : 'lazy'}
-                  className="pointer-events-none block h-full w-full object-contain"
-                />
+                {/* 앞뒤 한 편씩만 미리 불러온다 */}
+                {Math.abs(i - index) <= 1 && (
+                  <img
+                    src={c.imageUrl}
+                    alt={`오늘의 4컷 만화 ${i + 1}`}
+                    draggable={false}
+                    decoding="async"
+                    className="pointer-events-none block h-full w-full object-contain"
+                  />
+                )}
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            {bursts.map((b) => (
-              <span
-                key={b.id}
-                className="material-symbols-outlined filled animate-heart-burst absolute text-6xl text-primary-container drop-shadow-[0_4px_16px_rgba(255,84,70,0.6)]"
-                style={{ left: b.x, top: b.y }}
-              >
-                favorite
-              </span>
-            ))}
-          </div>
-
-          {index > 0 && (
-            <button
-              type="button"
-              aria-label="이전 만화"
-              onClick={() => goTo(index - 1)}
-              className="absolute top-1/2 left-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface-container-lowest/40 text-on-surface opacity-70 backdrop-blur-md transition hover:opacity-100 active:scale-90"
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {bursts.map((b) => (
+            <span
+              key={b.id}
+              className="material-symbols-outlined filled animate-heart-burst absolute text-6xl text-primary-container drop-shadow-[0_4px_16px_rgba(255,84,70,0.6)]"
+              style={{ left: b.x, top: b.y }}
             >
-              <span className="material-symbols-outlined text-lg">chevron_left</span>
-            </button>
-          )}
-          {index < comics.length - 1 && (
-            <button
-              type="button"
-              aria-label="다음 만화"
-              onClick={() => goTo(index + 1)}
-              className="absolute top-1/2 right-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface-container-lowest/40 text-on-surface opacity-70 backdrop-blur-md transition hover:opacity-100 active:scale-90"
-            >
-              <span className="material-symbols-outlined text-lg">chevron_right</span>
-            </button>
-          )}
+              favorite
+            </span>
+          ))}
         </div>
 
         {toast && (
@@ -284,24 +277,30 @@ export default function ViewerScreen() {
         )}
       </div>
 
-      {/* 만화를 가리지 않도록 이미지 아래 별도 줄에 둔다 */}
-      <div className="flex h-14 shrink-0 items-center justify-between bg-surface px-margin">
-        <div className="flex items-center gap-1.5" aria-label={`${index + 1} / ${comics.length}`}>
-          {comics.length <= 12 ? (
-            comics.map((c, i) => (
-              <span
-                key={c.id}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === index ? 'w-2.5 bg-primary-container' : 'w-1.5 bg-on-surface-variant/40'
-                }`}
-              />
-            ))
-          ) : (
-            <span className="font-label-sm text-label-sm text-on-surface-variant">
-              {index + 1} / {comics.length}
+      {/* 화면 아래에 고정. 만화가 넘어가도 움직이지 않고, 만화를 가리지도 않는다 */}
+      <div className="relative flex h-14 shrink-0 items-center justify-between bg-surface px-margin">
+        {/* 전체 중 어디쯤인지 보여 주는 가는 진행 막대 */}
+        <div aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-surface-container-high">
+          <div
+            className="h-full bg-primary-container transition-[width] duration-300"
+            style={{ width: `${((index + 1) / count) * 100}%` }}
+          />
+        </div>
+
+        <div className="flex items-center gap-space-sm">
+          {index === 0 && (
+            <span className="rounded-full bg-primary-container/20 px-2 py-0.5 font-label-sm text-label-sm text-primary">
+              오늘의 만화
             </span>
           )}
+          <span
+            className="font-label-md text-label-md text-on-surface-variant tabular-nums"
+            aria-label={`${count}편 중 ${index + 1}번째`}
+          >
+            {index + 1} / {count}
+          </span>
         </div>
+
         <div className="flex items-center gap-space-sm">
           <button
             type="button"
