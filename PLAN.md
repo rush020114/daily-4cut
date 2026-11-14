@@ -42,9 +42,9 @@
 | `TURNSTILE_SECRET_KEY` | Secret | 봇 확인(서버) |
 | `OPENAI_API_KEY` | Secret | 업로드 이미지 AI 검수 |
 | `RESEND_API_KEY` | Secret | 알림 메일 |
-| `ACCESS_TEAM_DOMAIN` | Plaintext | 관리자 보호: Cloudflare Access 팀 도메인 (예: `xxxx.cloudflareaccess.com`) |
-| `ACCESS_AUD` | Plaintext | 관리자 보호: Access 애플리케이션 AUD 태그 |
 | `POLAR_ACCESS_TOKEN` | Secret | 결제(9단계) |
+| `ACCESS_TEAM_DOMAIN` | Plaintext | Cloudflare Access 팀 도메인(`xxxx.cloudflareaccess.com`). 관리자 API 서명 토큰 검증용 |
+| `ACCESS_AUD` | Plaintext | Cloudflare Access 애플리케이션 Audience(AUD) 태그. 없으면 관리자 API는 항상 닫혀 있음 |
 
 ## 이미 있는 인프라
 
@@ -88,7 +88,7 @@
 
 - [ ]  Cloudflare Pages 새 프로젝트 → Git 연결 (preset React (Vite), build `npm run build`, output `dist`)
 - [ ]  Custom domains에 `comic.seunglabs.com`
-- [ ]  R2 버킷 `comic-images` 생성 → Pages Bindings에 `COMIC_BUCKET`으로 연결
+- [ ]  R2 버킷 `daily-4cut-photos` 생성 → Pages Bindings에 `COMIC_BUCKET`으로 연결
 - [ ]  Supabase 프로젝트(서울 리전) 생성 또는 기존 프로젝트 사용 → URL·키를 위 이름으로 등록
 
 **범위**: 배포 설정 확인, 환경 변수를 읽는 코드 구조 준비
@@ -103,7 +103,7 @@
 
 - [ ]  Cloudflare Turnstile 사이트 생성 → 키 등록
 - [ ]  OpenAI 새 키(이 프로젝트용), Resend 새 키(Sending access) 등록
-- [ ]  관리자 페이지 보호: Cloudflare Zero Trust → Access에서 `/admin`과 관리자 API 경로를 내 이메일만 들어오게 설정 (Claude Code가 방법을 안내한다)
+- [ ]  관리자 페이지 보호: Claude Code가 제안하는 방식(Cloudflare Access 권장)을 정하고, Access를 쓰면 Zero Trust에서 `/admin`과 관리자 API 경로를 내 이메일만 들어오게 설정 (Claude Code가 방법을 안내한다)
 
 **범위**: 승인된 만화 보기, 로그인 없는 좋아요, 로그인 없는 업로드, AI 검수 + 관리자 승인, 신고, 알림 메일
 
@@ -138,7 +138,7 @@
 
 **범위**: 이용약관, 개인정보처리방침, 문의 페이지, 푸터 링크
 
-**지킬 것**: 문구가 실제 동작과 일치. 문의처는 `support@seunglabs.com`
+**지킬 것**: 문구가 실제 동작과 일치. 문의처는 `support@seunglabs.com`. 3단계 구현에서 늘어난 수집 정보를 반드시 반영한다: **좋아요 중복 방지용 기기 ID(브라우저 저장)와 IP 해시**(IP 원본은 저장하지 않음), 업로드 제한용 기기·IP 정보
 
 **완료 기준**: 수집 정보·검수·저작권 신고 방법이 실제 동작대로 적혀 있다
 
@@ -212,7 +212,7 @@
 - 만화 자체를 가리는 광고 금지
 - 배분을 시작하면 좋아요를 로그인으로 넘긴다
 - 지급은 사람이 한다. 코드는 계산표까지만
-- 돈 내면 노출을 올려주는 방식, 보는 것 자체를 유료로 막는 방식 금지
+- 돈 내면 노출을 올려주는 방식, 보는 것 자체를 유료로 막는 방식 금지 (기다리면 무료로 열리는 9-4의 미리보기는 예외)
 
 ---
 
@@ -259,3 +259,63 @@
 - 최신 안드로이드 공식 문서 기준
 
 **완료 기준**: 내 폰에서 화면을 켜면 오늘의 4컷이 보이고, 설정(하루 한 번 / 켤 때마다 / 끄기)이 동작한다
+
+---
+
+## 결정 기록 (대화에서 정한 것. 새 결정이 생기면 여기에 한 줄 추가)
+
+**진행 상태 (2026-11-13)**
+
+- 1단계 완료 (커밋 `f5661ee`). 넘기기·업로드 화면은 사람이 직접 눌러 확인하기로 함
+- 2단계 **완료**(커밋 `040d48d`). 도메인 연결, R2 바인딩, Supabase 변수 등록 모두 `/api/health`(값은 노출하지 않고 등록·연결 여부만 확인)로 검증됨. `/api/health`는 누구나 열 수 있으므로 3단계에서 관리자 보호 경로로 옮길지 검토. `wrangler.toml`은 대시보드 설정을 덮어쓸 수 있어 일부러 만들지 않음. 구성: Cloudflare **Pages**(legacy workflow, Import Git) 프로젝트 `daily-4cut` 배포 완료, `comic.seunglabs.com` 연결(Verifying). R2 버킷 `daily-4cut-photos` + `COMIC_BUCKET` 바인딩, Supabase 프로젝트와 변수 3개 등록도 끝남
+
+- R2 바인딩 `COMIC_BUCKET` 설정 화면까지 진행함(저장 여부는 사람이 확인). Supabase 프로젝트 `daily-4cut`(조직 `seunglabs`, 서울) 생성 중: **Enable Data API 켬 / Automatically expose new tables 끔 / Enable automatic RLS 켬**. DB 비밀번호는 자동 생성해 사람이 비밀번호 관리자에 저장(대화·코드에 붙이지 않음)
+- 3단계 SQL에는 **필요한 GRANT와 RLS 정책을 반드시 포함**한다(자동 공개를 껐기 때문). 남은 일: Supabase 키 3개를 Cloudflare Variables and secrets에 등록(`SUPABASE_URL`·`SUPABASE_ANON_KEY` Plaintext, `SUPABASE_SERVICE_ROLE_KEY` Secret)
+
+- Supabase 키는 **새 방식(Publishable / Secret)** 을 쓴다(기존 anon/service_role은 2027년 초 폐지 예정). 변수 이름은 그대로: Publishable key → `SUPABASE_ANON_KEY`, Secret key → `SUPABASE_SERVICE_ROLE_KEY`. 코드는 새 키 방식에 맞게 작성한다
+
+**진행 상태 (2026-11-14)**
+
+- 3-1, 3-2 완료. 3-3(AI 검수, /admin, 신고, 메일) 구현·배포 완료(커밋 `a482ce6`). 모바일 업로드·당겨서 새로고침 확인됨
+- **남은 일**: Supabase에서 `db/004_moderation.sql` 실행 → Cloudflare Access 설정(`/admin*`, `/api/admin/*`, 내 이메일만 Allow) → `ACCESS_TEAM_DOMAIN`·`ACCESS_AUD` 등록 후 재배포 → 실제 업로드·알림 메일·승인 흐름 확인
+- OpenAI 이미지 검수는 선정·폭력·자해만 이미지로 판단(혐오·괴롭힘은 이미지 불가) → 모든 만화가 관리자 승인을 거치고 신고로 보완. 5단계 약관이 "AI가 모두 걸러준다"로 읽히면 안 됨
+- WebP가 OpenAI 검수에서 받아지는지 미확인. 관리자 화면에 "AI 검수 실패 … 400"이 보이면 JPEG/PNG 변환 검토
+- 5단계 개인정보처리방침에 이메일, 업로드 기기 ID, IP 해시, 신고 기록을 적는다
+- **3단계 완료** (업로드 → AI 검수 → 알림 메일 → 승인 → 작가 메일 확인됨). Cloudflare Access 설정 완료(앱 `daily-4cut-admin`, 팀 `blue-sky-2c13`), `/admin` 접속 확인
+- 로고·파비콘 완료(`907fb5a`, 원본 PNG 삭제, 16·32px는 간격 넓힌 별도 SVG). 3-4 세로 스냅 피드 구현·배포(`f5d3d32`), 실제 폰·트랙패드 느낌은 사람이 확인 중. 위치 표시는 `3 / 12` 숫자 + 진행 막대. 좌우 버튼은 제거
+- 다음: 4단계(분석·성능) → 5단계(약관·개인정보). 안드로이드 홈 화면 maskable 아이콘은 6단계에서
+- **로고**: Gemini 원본 PNG는 참고용으로만 쓰고, 반짝이 없는 `assets/logo/logo.svg`와 아이콘이 정상 확인되면 **원본은 저장소에서 삭제**한다(원본은 사람이 Gemini 대화·다운로드 폴더에 따로 보관)
+- 워터마크 규칙 정리: 업로드된 만화의 Gemini 반짝이는 지우지 않는다. 로고는 우리 것이라 **로고 SVG에서만 반짝이를 뺐다**(예외)
+- `/api/health`는 아직 공개 → 4단계 시작 전에 `/api/admin/health`로 옮기거나 삭제(권장: 관리자 경로로 이동)
+- 사람이 반말·짧은 답변을 원함(토큰 절약). 답은 짧게, 한 가지 추천 위주
+
+**목표와 방향**
+
+- 목표: 월 100만원. 첫 마일스톤은 Claude Max 구독료
+- personal-stylist(AURA STYLE)는 더 발전시키지 않음. 4컷 만화 웹 → 안드로이드 잠금화면 앱이 주력
+- 카페 매출 리포트는 가능한 범위까지(Toss POS 엑셀 + "왜 매출이 변했는지" 설명 중심). 재고·자재 앱은 **회사 겸업 금지 조항을 확인하기 전에는 만들지 않음**
+- 작가 수익 배분 전에 **세무사 상담** 필수
+- 만화 구상·제작은 별도 Claude가 담당. 이 프로젝트는 서비스 구축만 다룸
+
+**화면과 디자인**
+
+- Stitch는 **[앱] 플랫폼**으로 만든다. 현재 시안(어두운 배경)으로 확정. **어두운 배경으로 시작**하고, 반응이 나쁠 때만 밝은 화면 자동 전환을 검토
+- 시안에서 뺀 것: 프로필 아이콘(Viewer/Upload), '작가의 말', '즉시 공개' 문구
+- 형식: 세로 9:16 권장, 정사각형 등 다른 비율도 허용(극단적인 비율만 거절). 화면에는 이미지 전체가 잘리지 않게 보여주고 남는 자리는 배경색
+- 만화 아래 설명 글 없음. 앞의 세 컷으로 뜻이 짐작되어야 함
+- 첫 화면은 **모두에게 같은 "오늘의 4컷" 한 편**(관리자가 지정, 지정이 없으면 노출 점수 1위). 넘기면 점수 순서의 다른 만화. **넘기는 방향은 위아래(한 편이 한 화면을 채우고 스냅)로 바꾸기로 함**(마우스 휠 지원, 만화 사이 광고 배치에 유리). 3-3 완료 후 적용. 당겨서 새로고침은 맨 위에서만 동작하게 조정
+
+**콘텐츠와 수익**
+
+- 영어 표현 만화는 **같은 서비스 안의 시리즈**로 먼저 시도(별도 사이트 X). 한국인 대상인지 외국인 대상인지는 **미정**. 해설을 붙이지 않는다
+- 작가 한 줄 소개는 8단계 작가 페이지에서
+- 시리즈 + **미리보기 유료(기다리면 무료)** 는 9-4로 계획. 보는 것 자체는 막지 않고 노출 순위는 건드리지 않음. 안드로이드 앱 안 결제는 구글 플레이 결제 정책 확인 필요
+- 광고 + 광고 없애기(Polar) + 작가 파트너 수익 배분. 지급은 처음엔 사람이 직접 이체
+
+**운영 원칙**
+
+- **AI로 만든 만화도 받는다.** 업로드 약관 문구는 "본인이 그린 그림만"이 아니라 "내가 만들었거나 사용할 권리가 있는 작품입니다. AI 도구로 만든 경우 그 도구의 이용약관이 허용하는 범위에서 올립니다."로 한다. **AI 사용 표시 체크박스는 만들지 않는다**(Gemini 반짝이 워터마크는 지우지 않음). 5단계 약관 점검 때 전문가에게 AI 생성물 저작권·표시 의무를 확인한다
+- 키·토큰·비밀번호는 대화나 코드에 붙이지 않는다. Cloudflare·Supabase 입력칸에만 넣는다
+- 올리자마자 공개하지 않는다(AI 검수 + 관리자 승인). 관리자 페이지는 Cloudflare Access 권장
+- Gemini 생성 이미지의 반짝이(워터마크)는 지우지 않는다
+- 분석은 GA·Clarity로 확인하되, 초반에는 방문자가 적어 숫자 해석에 한계가 있음
