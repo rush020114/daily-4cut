@@ -10,4 +10,4 @@ export const UPLOAD_LIMITS = {
 }
 
 // 사용자가 동의한 약관의 버전. 문구를 바꾸면 올린다.
-export const TERMS_VERSION = 'v1'
+export const TERMS_VERSION = 'v2'

@@ -12,4 +12,4 @@ export const LIMITS = {
 export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 // 약관 문구를 바꾸면 서버의 TERMS_VERSION 도 함께 올린다.
-export const TERMS_VERSION = 'v1'
+export const TERMS_VERSION = 'v2'

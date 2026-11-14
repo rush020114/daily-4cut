@@ -264,9 +264,9 @@ export default function UploadScreen({ onBack }: Props) {
             />
 
             <div className="mt-space-md flex w-full items-center justify-between rounded-lg bg-surface-container px-space-md py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg text-on-surface-variant">image</span>
-                <div className="flex flex-col">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="material-symbols-outlined shrink-0 text-lg text-on-surface-variant">image</span>
+                <div className="flex min-w-0 flex-col">
                   <span className="font-label-md text-label-md text-on-surface">JPG, PNG, WebP 지원</span>
                   <span className="font-body text-body-sm text-on-surface-variant">한 장에 4컷, 가로세로 1:3 이내 (최대 15MB)</span>
                 </div>
@@ -275,7 +275,7 @@ export default function UploadScreen({ onBack }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={openPicker}
-                className="rounded bg-surface-container-highest px-3 py-1.5 font-label-md text-label-md text-on-surface transition active:scale-95 hover:bg-surface-bright disabled:opacity-50"
+                className="ml-2 shrink-0 rounded bg-surface-container-highest px-3 py-1.5 font-label-md whitespace-nowrap text-label-md text-on-surface transition active:scale-95 hover:bg-surface-bright disabled:opacity-50"
               >
                 {picked ? '다시 선택' : '파일 선택'}
               </button>
@@ -331,7 +331,7 @@ export default function UploadScreen({ onBack }: Props) {
           <legend className="sr-only">업로드 약관</legend>
           <ul className="flex list-none flex-col gap-1.5 font-body text-body-sm text-on-surface-variant">
             {[
-              '내가 직접 그린 그림만 올립니다.',
+              '내가 만들었거나 사용할 권리가 있는 작품입니다. AI 도구로 만든 경우 그 도구의 이용약관이 허용하는 범위에서 올립니다.',
               '선정적·폭력적·혐오·불법 콘텐츠와 타인의 저작권을 침해하는 그림은 올리지 않으며, 어기면 숨김 처리될 수 있습니다.',
               '저작권은 작가(나)에게 있고, 서비스는 이 만화를 보여주기 위한 권한만 가집니다.',
             ].map((text) => (
