@@ -1,6 +1,7 @@
 import { json, requireBucket, type Env } from '../_lib/env'
 import { TERMS_VERSION, UPLOAD_LIMITS as L } from '../_lib/limits'
 import { errorResponse, hashIp, isSameOrigin, readDeviceId } from '../_lib/request'
+import { afterUpload } from '../_lib/review'
 import { rest } from '../_lib/supabase'
 import { verifyTurnstile } from '../_lib/turnstile'
 import { parseWebp } from '../_lib/webp'
@@ -10,7 +11,7 @@ const fail = (status: number, error: string, message: string) => json({ error, m
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // 누구나 만화를 올린다. 올린 만화는 '검수 대기(pending)'로만 저장되고 공개되지 않는다.
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
   if (!isSameOrigin(request)) return fail(403, 'forbidden', '허용되지 않은 요청이에요.')
   const deviceId = readDeviceId(request)
   if (!deviceId) {
@@ -112,6 +113,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       )
       throw e
     }
+
+    // 5) AI 검수와 알림 메일은 응답을 보낸 뒤 이어서 처리한다. 실패해도 업로드는 '검수 대기'로 남는다.
+    waitUntil(
+      afterUpload(env, { id, webp: bytes, nickname, email }).catch((e) => console.error('afterUpload failed:', id, e)),
+    )
 
     return json({ id, status: 'pending' }, 201)
   } catch (e) {

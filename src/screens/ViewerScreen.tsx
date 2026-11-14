@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, fetchComics, setLike as saveLike, type Comic } from '../api'
+import { ApiError, fetchComics, reportComic, setLike as saveLike, type Comic, type ReportReason } from '../api'
+import ReportSheet from '../components/ReportSheet'
 import { usePullToRefresh } from '../lib/usePullToRefresh'
 
 type Burst = { id: number; x: number; y: number }
@@ -37,6 +38,7 @@ export default function ViewerScreen() {
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [bursts, setBursts] = useState<Burst[]>([])
   const [toast, setToast] = useState('')
+  const [reporting, setReporting] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
   const load = useCallback(() => {
@@ -141,6 +143,34 @@ export default function ViewerScreen() {
         next.delete(target.id)
         return next
       })
+    }
+  }
+
+  // 신고를 보낸다. 성공하면 시트를 닫고, 신고가 쌓여 숨겨진 만화는 내 화면에서도 바로 뺀다.
+  async function submitReport(target: Comic, reason: ReportReason) {
+    try {
+      const res = await reportComic(target.id, reason)
+      setReporting(false)
+      if (res.hidden) {
+        const at = comics!.findIndex((c) => c.id === target.id)
+        const list = comics!.filter((c) => c.id !== target.id)
+        const next = Math.max(Math.min(at, list.length - 1), 0)
+        setComics(list)
+        setIndex(next)
+        requestAnimationFrame(() => {
+          const el = carouselRef.current
+          if (el) el.scrollTo({ left: el.clientWidth * next, behavior: 'instant' })
+        })
+      }
+      showToast('신고가 접수되었어요. 확인 후 조치할게요.')
+    } catch (e) {
+      // 이미 신고한 경우는 시트를 닫고 안내만 한다. 그 밖의 오류는 시트 안에서 다시 시도할 수 있게 던진다.
+      if (e instanceof ApiError && e.status === 409) {
+        setReporting(false)
+        showToast(e.message)
+        return
+      }
+      throw e
     }
   }
 
@@ -272,25 +302,37 @@ export default function ViewerScreen() {
             </span>
           )}
         </div>
-        <button
-          type="button"
-          aria-label="좋아요"
-          aria-pressed={comic.liked}
-          onClick={() => void toggleLike(comic, !comic.liked)}
-          className={`flex items-center gap-1.5 rounded-full py-2 pr-4 pl-3 text-on-surface transition active:scale-95 ${
-            comic.liked ? 'bg-surface-container-highest' : 'bg-surface-container-high'
-          }`}
-        >
-          <span
-            className={`material-symbols-outlined text-2xl ${
-              comic.liked ? 'filled text-primary-container' : 'text-on-surface-variant'
+        <div className="flex items-center gap-space-sm">
+          <button
+            type="button"
+            aria-label="신고"
+            onClick={() => setReporting(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant transition active:scale-95 hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-xl">flag</span>
+          </button>
+          <button
+            type="button"
+            aria-label="좋아요"
+            aria-pressed={comic.liked}
+            onClick={() => void toggleLike(comic, !comic.liked)}
+            className={`flex items-center gap-1.5 rounded-full py-2 pr-4 pl-3 text-on-surface transition active:scale-95 ${
+              comic.liked ? 'bg-surface-container-highest' : 'bg-surface-container-high'
             }`}
           >
-            favorite
-          </span>
-          <span className="font-headline text-label-md tracking-tight">{formatCount(comic.likeCount)}</span>
-        </button>
+            <span
+              className={`material-symbols-outlined text-2xl ${
+                comic.liked ? 'filled text-primary-container' : 'text-on-surface-variant'
+              }`}
+            >
+              favorite
+            </span>
+            <span className="font-headline text-label-md tracking-tight">{formatCount(comic.likeCount)}</span>
+          </button>
+        </div>
       </div>
+
+      {reporting && <ReportSheet onClose={() => setReporting(false)} onSubmit={(reason) => submitReport(comic, reason)} />}
     </div>
   )
 }

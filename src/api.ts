@@ -65,3 +65,11 @@ export const fetchConfig = () => request<{ turnstileSiteKey: string | null }>('/
 
 export const uploadComic = (form: FormData) =>
   request<{ id: string; status: 'pending' }>('/api/uploads', { method: 'POST', body: form })
+
+export type ReportReason = 'inappropriate' | 'copyright' | 'other'
+
+export const reportComic = (id: string, reason: ReportReason) =>
+  request<{ reported: true; hidden: boolean }>(`/api/comics/${id}/report`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })

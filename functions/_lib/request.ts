@@ -44,6 +44,13 @@ export function imageUrl(imageKey: string): string {
     : `/api/images/${imageKey.split('/').map(encodeURIComponent).join('/')}`
 }
 
+// 관리자용 이미지 주소. 승인 전 이미지도 볼 수 있어야 해서 공개용과 다른 경로를 쓴다.
+export function adminImageUrl(imageKey: string): string {
+  return imageKey.startsWith('/')
+    ? imageKey
+    : `/api/admin/images/${imageKey.split('/').map(encodeURIComponent).join('/')}`
+}
+
 // 예외를 사람이 읽을 수 있는 JSON 응답으로 바꾼다. 원인은 서버 로그에만 남긴다.
 export function errorResponse(e: unknown, fallbackMessage: string): Response {
   if (e instanceof MissingEnvError) {
