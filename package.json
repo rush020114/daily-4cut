@@ -11,6 +11,7 @@
     "typecheck:functions": "tsc -p functions/tsconfig.json"
   },
   "dependencies": {
+    "@jsquash/webp": "^1.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

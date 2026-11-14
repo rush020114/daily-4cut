@@ -38,7 +38,7 @@ let memoryId: string | undefined
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('x-device-id', getDeviceId())
-  if (init.body) headers.set('content-type', 'application/json')
+  if (typeof init.body === 'string') headers.set('content-type', 'application/json')
 
   let res: Response
   try {
@@ -60,3 +60,8 @@ export const setLike = (id: string, like: boolean) =>
   request<{ liked: boolean; likeCount: number }>(`/api/comics/${id}/like`, {
     method: like ? 'POST' : 'DELETE',
   })
+
+export const fetchConfig = () => request<{ turnstileSiteKey: string | null }>('/api/config')
+
+export const uploadComic = (form: FormData) =>
+  request<{ id: string; status: 'pending' }>('/api/uploads', { method: 'POST', body: form })
