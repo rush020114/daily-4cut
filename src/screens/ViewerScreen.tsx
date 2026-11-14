@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, fetchComics, setLike as saveLike, type Comic } from '../api'
+import { usePullToRefresh } from '../lib/usePullToRefresh'
 
 type Burst = { id: number; x: number; y: number }
 
@@ -68,6 +69,26 @@ export default function ViewerScreen() {
     window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(''), 3000)
   }
+
+  // 당겨서 새로고침: 목록과 좋아요 수를 다시 받는다. 보던 만화가 아직 있으면 그 자리에 머문다.
+  // 실패하면 화면의 기존 내용은 그대로 두고 이유만 알려 준다.
+  const currentId = comics?.[index]?.id
+  async function refresh() {
+    try {
+      const list = await fetchComics()
+      const keep = currentId ? list.findIndex((c) => c.id === currentId) : -1
+      const next = Math.max(keep, 0)
+      setComics(list)
+      setIndex(next)
+      requestAnimationFrame(() => {
+        const el = carouselRef.current
+        if (el) el.scrollTo({ left: el.clientWidth * next, behavior: 'instant' })
+      })
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '새로고침하지 못했어요. 다시 시도해 주세요.')
+    }
+  }
+  const ptr = usePullToRefresh(refresh, Boolean(comics?.length))
 
   if (loadError) return <Notice message={loadError} onRetry={load} />
   if (!comics) {
@@ -142,62 +163,86 @@ export default function ViewerScreen() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden" {...ptr.handlers}>
+        {/* 당겨서 새로고침 표시. 만화가 아래로 내려오며 드러나는 자리에 보인다 */}
         <div
-          ref={carouselRef}
-          onScroll={handleScroll}
-          className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain scroll-smooth select-none"
-          style={{ scrollbarWidth: 'none' }}
+          aria-hidden={!ptr.refreshing}
+          role={ptr.refreshing ? 'status' : undefined}
+          className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden"
+          style={{ height: ptr.pull, transition: ptr.dragging ? 'none' : 'height 0.25s ease' }}
         >
-          {comics.map((c, i) => (
-            <div
-              key={c.id}
-              onClick={handleTap}
-              className="relative h-full w-full shrink-0 snap-center bg-surface-container-lowest"
-            >
-              <img
-                src={c.imageUrl}
-                alt={`오늘의 4컷 만화 ${i + 1}`}
-                draggable={false}
-                loading={i < 2 ? 'eager' : 'lazy'}
-                className="pointer-events-none block h-full w-full object-contain"
-              />
-            </div>
-          ))}
+          {ptr.refreshing && <span className="sr-only">새로고침 중</span>}
+          <span
+            className={`material-symbols-outlined text-3xl ${ptr.triggered || ptr.refreshing ? 'text-primary-container' : 'text-on-surface-variant'} ${
+              ptr.refreshing ? 'animate-spin' : ''
+            }`}
+            style={{ opacity: Math.min(ptr.pull / 40, 1), transform: ptr.refreshing ? undefined : `rotate(${ptr.pull * 4}deg)` }}
+          >
+            refresh
+          </span>
         </div>
 
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          {bursts.map((b) => (
-            <span
-              key={b.id}
-              className="material-symbols-outlined filled animate-heart-burst absolute text-6xl text-primary-container drop-shadow-[0_4px_16px_rgba(255,84,70,0.6)]"
-              style={{ left: b.x, top: b.y }}
-            >
-              favorite
-            </span>
-          ))}
-        </div>
+        <div
+          className="relative h-full"
+          style={{ transform: `translateY(${ptr.pull}px)`, transition: ptr.dragging ? 'none' : 'transform 0.25s ease' }}
+        >
+          <div
+            ref={carouselRef}
+            onScroll={handleScroll}
+            className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain scroll-smooth select-none"
+            // 세로 당기기는 브라우저가 가져가지 않고 화면이 처리한다. 가로 넘기기와 확대(핀치)는 그대로 브라우저가 처리한다.
+            style={{ scrollbarWidth: 'none', touchAction: 'pan-x pinch-zoom' }}
+          >
+            {comics.map((c, i) => (
+              <div
+                key={c.id}
+                onClick={handleTap}
+                className="relative h-full w-full shrink-0 snap-center bg-surface-container-lowest"
+              >
+                <img
+                  src={c.imageUrl}
+                  alt={`오늘의 4컷 만화 ${i + 1}`}
+                  draggable={false}
+                  loading={i < 2 ? 'eager' : 'lazy'}
+                  className="pointer-events-none block h-full w-full object-contain"
+                />
+              </div>
+            ))}
+          </div>
 
-        {index > 0 && (
-          <button
-            type="button"
-            aria-label="이전 만화"
-            onClick={() => goTo(index - 1)}
-            className="absolute top-1/2 left-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface-container-lowest/40 text-on-surface opacity-70 backdrop-blur-md transition hover:opacity-100 active:scale-90"
-          >
-            <span className="material-symbols-outlined text-lg">chevron_left</span>
-          </button>
-        )}
-        {index < comics.length - 1 && (
-          <button
-            type="button"
-            aria-label="다음 만화"
-            onClick={() => goTo(index + 1)}
-            className="absolute top-1/2 right-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface-container-lowest/40 text-on-surface opacity-70 backdrop-blur-md transition hover:opacity-100 active:scale-90"
-          >
-            <span className="material-symbols-outlined text-lg">chevron_right</span>
-          </button>
-        )}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {bursts.map((b) => (
+              <span
+                key={b.id}
+                className="material-symbols-outlined filled animate-heart-burst absolute text-6xl text-primary-container drop-shadow-[0_4px_16px_rgba(255,84,70,0.6)]"
+                style={{ left: b.x, top: b.y }}
+              >
+                favorite
+              </span>
+            ))}
+          </div>
+
+          {index > 0 && (
+            <button
+              type="button"
+              aria-label="이전 만화"
+              onClick={() => goTo(index - 1)}
+              className="absolute top-1/2 left-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface-container-lowest/40 text-on-surface opacity-70 backdrop-blur-md transition hover:opacity-100 active:scale-90"
+            >
+              <span className="material-symbols-outlined text-lg">chevron_left</span>
+            </button>
+          )}
+          {index < comics.length - 1 && (
+            <button
+              type="button"
+              aria-label="다음 만화"
+              onClick={() => goTo(index + 1)}
+              className="absolute top-1/2 right-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface-container-lowest/40 text-on-surface opacity-70 backdrop-blur-md transition hover:opacity-100 active:scale-90"
+            >
+              <span className="material-symbols-outlined text-lg">chevron_right</span>
+            </button>
+          )}
+        </div>
 
         {toast && (
           <div
