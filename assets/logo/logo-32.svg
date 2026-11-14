@@ -1,0 +1,9 @@
+<!-- 32px 아이콘용. logo.svg 와 같은 바깥 여백(1024 기준 128)을 유지하고, 32px 격자에 맞춰 간격만 2px(64)로 맞췄다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="오늘의 4컷">
+  <title>오늘의 4컷</title>
+  <rect width="1024" height="1024" fill="#151517"/>
+  <rect x="128" y="128" width="352" height="352" rx="44" fill="#f2efe8"/>
+  <rect x="544" y="128" width="352" height="352" rx="44" fill="#fe5443"/>
+  <rect x="128" y="544" width="352" height="352" rx="44" fill="#f2efe8"/>
+  <rect x="544" y="544" width="352" height="352" rx="44" fill="#f2efe8"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="오늘의 4컷">
+  <title>오늘의 4컷</title>
+  <rect width="1024" height="1024" fill="#151517"/>
+  <rect x="128" y="128" width="364" height="364" rx="40" fill="#f2efe8"/>
+  <rect x="532" y="128" width="364" height="364" rx="40" fill="#fe5443"/>
+  <rect x="128" y="532" width="364" height="364" rx="40" fill="#f2efe8"/>
+  <rect x="532" y="532" width="364" height="364" rx="40" fill="#f2efe8"/>
+</svg>

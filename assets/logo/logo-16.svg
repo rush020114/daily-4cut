@@ -1,0 +1,10 @@
+<!-- 16px 파비콘용. logo.svg 와 같은 디자인이지만 16px 격자에 맞춰 다시 배치했다:
+     여백 1px · 칸 6px · 간격 2px (1024 기준 64 · 384 · 128). 간격이 흐려지지 않고 4칸이 또렷하게 보인다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="오늘의 4컷">
+  <title>오늘의 4컷</title>
+  <rect width="1024" height="1024" fill="#151517"/>
+  <rect x="64" y="64" width="384" height="384" rx="56" fill="#f2efe8"/>
+  <rect x="576" y="64" width="384" height="384" rx="56" fill="#fe5443"/>
+  <rect x="64" y="576" width="384" height="384" rx="56" fill="#f2efe8"/>
+  <rect x="576" y="576" width="384" height="384" rx="56" fill="#f2efe8"/>
+</svg>
