@@ -4,6 +4,7 @@
 export const SUPPORT_EMAIL = 'support@seunglabs.com'
 export const SITE_NAME = '오늘의 4컷'
 export const SITE_HOST = 'comic.seunglabs.com'
+export const SITE_TAGLINE = '하루 한 번, 피식 웃고 시작하는 4컷 만화'
 export const OPERATOR = 'seunglabs(운영자)'
 
 // 약관·방침을 고쳐서 다시 올릴 때 이 날짜도 바꾼다

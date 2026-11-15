@@ -3,7 +3,15 @@ import { json, type Env } from '../../_lib/env'
 import { isSameOrigin } from '../../_lib/request'
 
 // /api/admin/* 전체를 운영자만 쓰게 한다. 설정이 없거나 검증이 실패하면 항상 닫는다.
+// 관리자 API 응답은 검색에 나오지 않게 한다 (성공·오류 모두)
 export const onRequest: PagesFunction<Env> = async (context) => {
+  const res = await guard(context)
+  const out = new Response(res.body, res)
+  out.headers.set('x-robots-tag', 'noindex, nofollow')
+  return out
+}
+
+async function guard(context: EventContext<Env, string, Record<string, unknown>>): Promise<Response> {
   const { request, env } = context
 
   if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {

@@ -17,3 +17,13 @@
   Cache-Control: public, max-age=86400
 /samples/*
   Cache-Control: public, max-age=86400
+
+# 관리자 화면은 검색에 나오지 않게 한다 (robots.txt 로도 막고, 화면에도 noindex 가 들어 있다)
+/admin*
+  X-Robots-Tag: noindex, nofollow
+
+# 공유 미리보기 기본 이미지
+/og-default.png
+  Cache-Control: public, max-age=86400
+/icon-maskable-*.png
+  Cache-Control: public, max-age=86400

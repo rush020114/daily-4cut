@@ -1,0 +1,12 @@
+<!-- 안드로이드 maskable 아이콘용. 기기가 아이콘을 원·둥근 사각형 등으로 잘라도 4칸이 보이도록,
+     logo.svg 의 그림을 중앙 안전 영역(지름의 80% 원) 안으로 0.70배 줄였다. 배경은 가장자리까지 꽉 채운다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="오늘의 4컷">
+  <title>오늘의 4컷</title>
+  <rect width="1024" height="1024" fill="#151517"/>
+  <g transform="translate(512 512) scale(0.70) translate(-512 -512)">
+    <rect x="128" y="128" width="364" height="364" rx="40" fill="#f2efe8"/>
+    <rect x="532" y="128" width="364" height="364" rx="40" fill="#fe5443"/>
+    <rect x="128" y="532" width="364" height="364" rx="40" fill="#f2efe8"/>
+    <rect x="532" y="532" width="364" height="364" rx="40" fill="#f2efe8"/>
+  </g>
+</svg>

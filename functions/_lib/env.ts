@@ -2,6 +2,7 @@
 // 값은 Cloudflare 대시보드(Variables and Secrets, Bindings)에서 넣고, 코드는 이 이름으로만 읽는다.
 export interface Env {
   COMIC_BUCKET: R2Bucket
+  ASSETS: Fetcher // Pages 가 자동으로 붙여 주는 정적 파일(index.html 등) 접근
   SUPABASE_URL: string
   SUPABASE_ANON_KEY: string
   SUPABASE_SERVICE_ROLE_KEY: string

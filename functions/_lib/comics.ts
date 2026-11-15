@@ -16,6 +16,7 @@ export type PublicComic = {
   width: number | null
   height: number | null
   likeCount: number
+  isToday: boolean // 오늘의 만화(목록의 첫 번째)인지
 }
 
 const COLUMNS = 'id,image_key,image_width,image_height,like_count'
@@ -23,6 +24,17 @@ const PAGE_SIZE = 50
 // 모두에게 같은 목록이라 짧게 엣지에 보관한다. 새 승인·오늘의 만화 변경은 이 시간 안에 반영된다.
 const CACHE_SECONDS = 30
 const CACHE_KEY = 'https://comic.seunglabs.com/__cache/public-comics'
+
+function toPublic(c: Ranked, isToday: boolean): PublicComic {
+  return {
+    id: c.id,
+    imageUrl: imageUrl(c.image_key),
+    width: c.image_width,
+    height: c.image_height,
+    likeCount: c.like_count,
+    isToday,
+  }
+}
 
 // 승인된 만화를 순서대로: 1번째 = 오늘의 만화(관리자가 지정, 없으면 노출 점수 1위), 나머지는 노출 점수 순.
 async function loadFromDb(env: Env): Promise<PublicComic[]> {
@@ -42,13 +54,7 @@ async function loadFromDb(env: Env): Promise<PublicComic[]> {
     if (picked) list = [picked, ...list.filter((c) => c.id !== pickId)]
   }
 
-  return list.map((c) => ({
-    id: c.id,
-    imageUrl: imageUrl(c.image_key),
-    width: c.image_width,
-    height: c.image_height,
-    likeCount: c.like_count,
-  }))
+  return list.map((c, i) => toPublic(c, i === 0))
 }
 
 // 공개 목록. fresh 면 캐시를 건너뛰고 새로 읽는다(당겨서 새로고침). 캐시를 못 쓰는 환경에서는 항상 새로 읽는다.
@@ -78,4 +84,17 @@ export async function getPublicComics(
     )
   }
   return list
+}
+
+// 만화 한 편(공유 주소용). 공개 중인 만화(승인되고 공개일이 지난 것)만 찾는다. 승인 전·숨김·거절·없는 주소는 null.
+export async function getSharedComic(env: Env, id: string): Promise<PublicComic | null> {
+  const rows = await rest<Ranked[]>(env, 'anon', `ranked_comics?select=${COLUMNS}&id=eq.${id}`)
+  return rows[0] ? toPublic(rows[0], false) : null
+}
+
+// 공유 주소로 들어왔을 때의 목록: 공유된 만화가 첫 번째, 나머지는 평소 순서. (오늘의 만화 표시는 평소 첫 번째 만화에만 남는다)
+export function withSharedFirst(list: PublicComic[], shared: PublicComic): PublicComic[] {
+  const inList = list.find((c) => c.id === shared.id)
+  const first = inList ?? { ...shared, isToday: false }
+  return [first, ...list.filter((c) => c.id !== shared.id)]
 }

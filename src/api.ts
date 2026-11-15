@@ -5,6 +5,7 @@ export type Comic = {
   height: number | null
   likeCount: number
   liked: boolean
+  isToday?: boolean // 오늘의 만화인지 (서버가 알려 준다)
 }
 
 export class ApiError extends Error {

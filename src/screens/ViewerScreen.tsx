@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, fetchComics, reportComic, setLike as saveLike, type Comic, type ReportReason } from '../api'
 import ReportSheet from '../components/ReportSheet'
+import { SITE_NAME, SITE_TAGLINE } from '../legal/constants'
 import { track } from '../lib/analytics'
 import { useVerticalPager, type PageMethod } from '../lib/useVerticalPager'
 
@@ -9,7 +10,8 @@ type Burst = { id: number; x: number; y: number }
 // 서버가 홈 HTML 에 미리 넣어 준 만화 목록. 있으면 /api/comics 응답을 기다리지 않고 바로 그린다.
 declare global {
   interface Window {
-    __COMICS__?: { comics: Omit<Comic, 'liked'>[] }
+    // sharedId: 공유 주소(/c/<id>)로 들어왔을 때 첫 번째로 보여 줄 만화. notFound: 그 주소의 만화가 공개 중이 아님
+    __COMICS__?: { comics: Omit<Comic, 'liked'>[]; sharedId?: string; notFound?: boolean }
   }
 }
 
@@ -22,7 +24,7 @@ function formatCount(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 }
 
-function Notice({ message, onRetry }: { message: string; onRetry: () => void }) {
+function Notice({ message, onRetry, actionLabel = '다시 불러오기' }: { message: string; onRetry: () => void; actionLabel?: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-space-md px-space-xl text-center">
       <span className="material-symbols-outlined text-4xl text-on-surface-variant">sentiment_dissatisfied</span>
@@ -34,7 +36,7 @@ function Notice({ message, onRetry }: { message: string; onRetry: () => void }) 
         onClick={onRetry}
         className="rounded-lg bg-surface-container-highest px-space-md py-2 font-label-lg text-label-lg text-on-surface transition active:scale-95 hover:bg-surface-bright"
       >
-        다시 불러오기
+        {actionLabel}
       </button>
     </div>
   )
@@ -46,6 +48,7 @@ export default function ViewerScreen() {
   const toastTimer = useRef<number | undefined>(undefined)
   const [comics, setComics] = useState<Comic[] | null>(readEmbedded)
   const startedWithEmbedded = useRef(comics !== null)
+  const [notFound] = useState(() => window.__COMICS__?.notFound === true)
   const [neighborsReady, setNeighborsReady] = useState(false) // 첫 이미지가 도착한 뒤에야 앞뒤 이미지를 받는다
   const [loadError, setLoadError] = useState('')
   const [index, setIndex] = useState(0)
@@ -63,6 +66,7 @@ export default function ViewerScreen() {
   }, [])
 
   useEffect(() => {
+    if (notFound) return // 공유 주소의 만화가 공개 중이 아니면 목록을 받을 필요가 없다
     let cancelled = false
     // 미리 받은 목록으로 이미 그렸다면: 목록과 순서는 그대로 두고, 이 기기의 좋아요 표시와 최신 좋아요 수만 합친다
     const mergeOnly = attempt === 0 && startedWithEmbedded.current
@@ -93,7 +97,7 @@ export default function ViewerScreen() {
     return () => {
       cancelled = true
     }
-  }, [attempt])
+  }, [attempt, notFound])
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
@@ -123,7 +127,7 @@ export default function ViewerScreen() {
       comic_id: comics?.[next]?.id ?? '',
       position: next + 1,
       total: comics?.length ?? 0,
-      is_today: next === 0,
+      is_today: comics?.[next]?.isToday ?? false,
     })
     setIndex(next)
   }
@@ -148,6 +152,15 @@ export default function ViewerScreen() {
     enabled: count > 0 && !reporting,
   })
 
+  if (notFound) {
+    return (
+      <Notice
+        message="이 만화는 볼 수 없어요. 주소가 잘못되었거나, 숨겨지거나 삭제된 만화예요."
+        actionLabel="오늘의 만화 보기"
+        onRetry={() => location.assign('/')}
+      />
+    )
+  }
   if (loadError) return <Notice message={loadError} onRetry={load} />
   if (!comics) {
     return (
@@ -220,6 +233,33 @@ export default function ViewerScreen() {
         return
       }
       throw e
+    }
+  }
+
+  // 공유: 휴대폰 등 공유 기능이 있는 기기에서는 기기의 공유 창을, 없거나 실패하면 링크 복사로 넘어간다.
+  async function shareComic(target: Comic) {
+    const url = `${location.origin}/c/${target.id}`
+    const position = comics!.findIndex((c) => c.id === target.id) + 1
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: SITE_NAME, text: SITE_TAGLINE, url })
+        track('comic_share', { method: 'native', comic_id: target.id, position })
+        return
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return // 이용자가 공유 창을 닫았다
+        // 그 밖의 실패(권한 등)는 아래 링크 복사로 이어간다
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(url)
+      track('comic_share', { method: 'copy', comic_id: target.id, position })
+      showToast('링크를 복사했어요. 붙여넣어서 보내 보세요.')
+    } catch {
+      // 복사도 막힌 환경: 직접 복사할 수 있게 링크를 보여 준다
+      track('comic_share', { method: 'manual', comic_id: target.id, position })
+      window.prompt('이 링크를 복사해서 보내 주세요.', url)
     }
   }
 
@@ -342,7 +382,7 @@ export default function ViewerScreen() {
         </div>
 
         <div className="flex items-center gap-space-sm">
-          {index === 0 && (
+          {comic.isToday && (
             <span className="rounded-full bg-primary-container/20 px-2 py-0.5 font-label-sm text-label-sm text-primary">
               오늘의 만화
             </span>
@@ -356,6 +396,14 @@ export default function ViewerScreen() {
         </div>
 
         <div className="flex items-center gap-space-sm">
+          <button
+            type="button"
+            aria-label="공유"
+            onClick={() => void shareComic(comic)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant transition active:scale-95 hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-xl">share</span>
+          </button>
           <button
             type="button"
             aria-label="신고"

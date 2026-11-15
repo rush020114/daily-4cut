@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { request } from '../api'
+import { makeOgCard } from '../lib/ogCard'
 
 type AiResult = { flagged?: boolean; flaggedCategories?: string[]; error?: string }
 
@@ -15,6 +16,7 @@ type Item = {
   isSample: boolean
   ai: AiResult | null
   reports: string[]
+  hasCard?: boolean | null // 공유 미리보기 이미지(JPEG)가 있는지. null 은 확인하지 못함
 }
 
 type QueueName = 'review' | 'hidden' | 'pending' | 'rejected' | 'approved'
@@ -32,6 +34,9 @@ const TABS: { id: QueueName; label: string }[] = [
   { id: 'rejected', label: '거절됨' },
   { id: 'approved', label: '공개 중' },
 ]
+
+// 공유 미리보기 카드가 필요한데 아직 없는 만화 (SVG 샘플 이미지는 만들 수 없어 제외)
+const needsCard = (c: Item) => c.hasCard === false && !c.imageUrl.startsWith('/samples/')
 
 const REASON_LABEL: Record<string, string> = { inappropriate: '선정·폭력', copyright: '저작권', other: '기타' }
 
@@ -110,16 +115,46 @@ export default function AdminScreen() {
     }
   }
 
+  // 공유 미리보기 카드(JPEG)를 만들어 올린다. 실패해도 승인 자체는 막지 않는다: 카드가 없으면 공유할 때 만화 이미지(WebP)가 대신 쓰인다.
+  async function buildCard(item: Item): Promise<'ok' | 'failed' | 'skipped'> {
+    if (item.imageUrl.startsWith('/samples/')) return 'skipped' // 샘플 이미지는 SVG 라서 미리보기에 쓸 수 없다
+    try {
+      const card = await makeOgCard(item.imageUrl)
+      await request(`/api/admin/og/${item.id}`, { method: 'PUT', body: card, headers: { 'content-type': 'image/jpeg' } })
+      return 'ok'
+    } catch (e) {
+      console.error('og card failed:', item.id, e)
+      return 'failed'
+    }
+  }
+
   const decide = (item: Item, decision: 'approve' | 'reject', confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return
     void run(item.id, async () => {
+      // 공개되는 만화는 승인할 때 공유 미리보기 카드를 함께 만든다
+      const card = decision === 'approve' ? await buildCard(item) : 'skipped'
       const res = await request<{ status: string; mail: string }>(`/api/admin/comics/${item.id}/decision`, {
         method: 'POST',
         body: JSON.stringify({ decision }),
       })
-      return `${res.status === 'approved' ? '승인했어요.' : '거절했어요.'}${MAIL_NOTE[res.mail] ?? ''}`
+      const cardNote = card === 'failed' ? ' 다만 공유 미리보기 이미지는 만들지 못해 원본 이미지로 대신 보여요. (공개 중 탭에서 다시 만들 수 있어요)' : ''
+      return `${res.status === 'approved' ? '승인했어요.' : '거절했어요.'}${MAIL_NOTE[res.mail] ?? ''}${cardNote}`
     })
   }
+
+  // 이미 공개된 만화 중 공유 미리보기 카드가 없는 것을 한꺼번에 만든다
+  const buildMissingCards = () =>
+    void run('cards', async () => {
+      const targets = (data?.queues.approved ?? []).filter(needsCard)
+      let ok = 0
+      let failed = 0
+      for (const [i, item] of targets.entries()) {
+        setNotice(`공유 이미지를 만드는 중… ${i + 1} / ${targets.length}`)
+        if ((await buildCard(item)) === 'ok') ok++
+        else failed++
+      }
+      return `공유 이미지를 ${ok}개 만들었어요.${failed ? ` ${failed}개는 만들지 못했어요. 다시 시도해 주세요.` : ''}`
+    })
 
   const recheck = (item: Item) =>
     void run(item.id, async () => {
@@ -138,6 +173,7 @@ export default function AdminScreen() {
     })
 
   const list = data?.queues[tab] ?? []
+  const missingCards = data?.queues.approved.filter(needsCard).length ?? 0
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-[560px] bg-surface px-margin py-space-lg">
@@ -176,17 +212,32 @@ export default function AdminScreen() {
       )}
 
       {tab === 'approved' && data && (
-        <div className="mt-space-md flex items-center justify-between gap-space-sm font-body text-body-sm text-on-surface-variant">
-          <span>오늘({data.today}, 한국 시간)의 만화를 지정해요. 지정하지 않으면 노출 점수 1위가 오늘의 만화가 돼요.</span>
-          <button
-            type="button"
-            disabled={busyId !== null || !data.pickedId}
-            onClick={() => pick(null)}
-            className="shrink-0 rounded-lg bg-surface-container-highest px-3 py-2 font-label-md text-label-md whitespace-nowrap text-on-surface disabled:opacity-40"
-          >
-            지정 풀기
-          </button>
-        </div>
+        <>
+          <div className="mt-space-md flex items-center justify-between gap-space-sm font-body text-body-sm text-on-surface-variant">
+            <span>오늘({data.today}, 한국 시간)의 만화를 지정해요. 지정하지 않으면 노출 점수 1위가 오늘의 만화가 돼요.</span>
+            <button
+              type="button"
+              disabled={busyId !== null || !data.pickedId}
+              onClick={() => pick(null)}
+              className="shrink-0 rounded-lg bg-surface-container-highest px-3 py-2 font-label-md text-label-md whitespace-nowrap text-on-surface disabled:opacity-40"
+            >
+              지정 풀기
+            </button>
+          </div>
+          {missingCards > 0 && (
+            <div className="mt-space-sm flex items-center justify-between gap-space-sm rounded-lg bg-surface-container-high px-space-md py-2 font-body text-body-sm text-on-surface-variant">
+              <span>공유 미리보기 이미지가 없는 만화가 {missingCards}개 있어요. 없으면 카카오톡 등에서 미리보기가 안 뜰 수 있어요.</span>
+              <button
+                type="button"
+                disabled={busyId !== null}
+                onClick={buildMissingCards}
+                className="shrink-0 rounded-lg bg-primary-container px-3 py-2 font-label-md text-label-md whitespace-nowrap text-on-surface disabled:opacity-40"
+              >
+                일괄 만들기
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {data && !list.length && (
@@ -218,6 +269,7 @@ export default function AdminScreen() {
                 {item.reports.length > 0 && <span className="text-on-error-container">{reportSummary(item.reports)}</span>}
                 <span>
                   {tab === 'approved' ? `좋아요 ${item.likeCount} · ` : ''}
+                  {tab === 'approved' && item.hasCard != null ? (item.hasCard ? '공유 이미지 있음 · ' : '공유 이미지 없음 · ') : ''}
                   {item.hasEmail ? '이메일 있음' : '이메일 없음'}
                 </span>
 

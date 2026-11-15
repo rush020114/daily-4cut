@@ -1,0 +1,11 @@
+# 오늘의 4컷 (comic.seunglabs.com)
+User-agent: *
+# 관리자 화면과 관리자 API는 검색에 나오면 안 된다
+Disallow: /admin
+Disallow: /api/admin/
+# 화면이 쓰는 데이터용 API (검색 대상이 아니다). 만화 이미지(/api/images/)는 막지 않는다: 공유 미리보기와 이미지 검색에 쓰인다
+Disallow: /api/comics
+Disallow: /api/uploads
+Disallow: /api/config
+
+Sitemap: https://comic.seunglabs.com/sitemap.xml
