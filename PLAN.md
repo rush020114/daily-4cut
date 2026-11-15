@@ -283,7 +283,9 @@
 - 5단계 개인정보처리방침에 이메일, 업로드 기기 ID, IP 해시, 신고 기록을 적는다
 - **3단계 완료** (업로드 → AI 검수 → 알림 메일 → 승인 → 작가 메일 확인됨). Cloudflare Access 설정 완료(앱 `daily-4cut-admin`, 팀 `blue-sky-2c13`), `/admin` 접속 확인
 - 로고·파비콘 완료(`907fb5a`, 원본 PNG 삭제, 16·32px는 간격 넓힌 별도 SVG). 3-4 세로 스냅 피드 구현·배포(`f5d3d32`), 실제 폰·트랙패드 느낌은 사람이 확인 중. 위치 표시는 `3 / 12` 숫자 + 진행 막대. 좌우 버튼은 제거
-- 다음: 4단계(분석·성능) → 5단계(약관·개인정보). 안드로이드 홈 화면 maskable 아이콘은 6단계에서
+- **4단계 코드 배포 완료**(`1b6ccdd`): GA(새 속성·스트림 `daily-4cut`, 측정 ID `G-9DS3G79485`), Clarity(새 프로젝트 `daily-4cut`, ID `ze1ppcbdbz`). `/admin`에선 비활성. `/api/health`는 `/api/admin/health`로 이동 완료. 이벤트: `comic_page`, `comic_like`, `comic_report`, `comic_upload`, `comic_upload_error`. 남은 확인: GA 실시간 방문 잡히는지, PageSpeed 모바일 90점
+- GA·Clarity는 쿠키로 방문 정보를 수집 → 5단계 개인정보처리방침에 반드시 적는다. GA 맞춤 측정기준 등록은 필요해질 때
+- 다음: 4단계 확인(GA 실시간, PageSpeed) → 5단계(약관·개인정보). 안드로이드 홈 화면 maskable 아이콘은 6단계에서
 - **로고**: Gemini 원본 PNG는 참고용으로만 쓰고, 반짝이 없는 `assets/logo/logo.svg`와 아이콘이 정상 확인되면 **원본은 저장소에서 삭제**한다(원본은 사람이 Gemini 대화·다운로드 폴더에 따로 보관)
 - 워터마크 규칙 정리: 업로드된 만화의 Gemini 반짝이는 지우지 않는다. 로고는 우리 것이라 **로고 SVG에서만 반짝이를 뺐다**(예외)
 - `/api/health`는 아직 공개 → 4단계 시작 전에 `/api/admin/health`로 옮기거나 삭제(권장: 관리자 경로로 이동)
