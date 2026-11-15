@@ -304,8 +304,9 @@ export default function UploadScreen({ onBack }: Props) {
           <div className="flex items-center justify-between">
             <label htmlFor="author-nickname" className="flex items-center gap-1.5 font-label-lg text-label-lg text-on-surface">
               <span className="material-symbols-outlined text-base text-secondary">face</span>
-              작가 닉네임
+              이름
               <span className="font-label-sm text-label-sm text-primary">*필수</span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant">공개되지 않아요</span>
             </label>
             <span className="font-label-sm text-label-sm text-on-surface-variant">
               {Array.from(nickname).length}/{LIMITS.nicknameMax}
@@ -313,6 +314,7 @@ export default function UploadScreen({ onBack }: Props) {
           </div>
           <input
             id="author-nickname"
+            aria-describedby="author-name-help"
             type="text"
             required
             maxLength={LIMITS.nicknameMax}
@@ -321,6 +323,9 @@ export default function UploadScreen({ onBack }: Props) {
             placeholder="예) 냥이집사, 공감툰작가"
             className="w-full rounded-lg bg-surface-container-low px-space-md py-3 font-body text-body-md text-on-surface transition-colors placeholder:text-outline-variant focus:bg-surface-container-high focus:outline-none"
           />
+          <p id="author-name-help" className="font-body text-body-sm text-on-surface-variant">
+            운영자만 볼 수 있고, 결과 안내 메일의 호칭에 쓰여요. 실명이 아니어도 괜찮아요.
+          </p>
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -366,7 +371,7 @@ export default function UploadScreen({ onBack }: Props) {
             <span className="font-label-sm text-label-sm text-primary">*필수</span>
           </label>
           <p className="font-body text-body-sm text-on-surface-variant">
-            올리면 닉네임과 (입력했다면) 이메일, 만화 이미지가 저장돼요. 자세한 내용은{' '}
+            올리면 이름과 (입력했다면) 이메일, 만화 이미지가 저장돼요. 자세한 내용은{' '}
             <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
               개인정보처리방침
             </a>
