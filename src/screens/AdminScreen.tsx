@@ -77,10 +77,14 @@ export default function AdminScreen() {
     let cancelled = false
     request<AdminData>('/api/admin/comics').then(
       (res) => {
-        if (!cancelled) {
-          setData(res)
-          setError('')
+        if (cancelled) return
+        // 로그인이 만료되어 로그인 페이지가 오는 등 예상한 형태가 아니면 빈 화면이 되지 않도록 안내한다
+        if (!res?.queues) {
+          setError('관리자 데이터를 읽지 못했어요. 로그인이 만료되었을 수 있어요. 페이지를 새로고침해 다시 로그인해 주세요.')
+          return
         }
+        setData(res)
+        setError('')
       },
       (e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : '불러오지 못했어요.')

@@ -12,7 +12,7 @@ const items: { id: Screen; icon: string; label: string }[] = [
 
 export default function BottomNav({ screen, onChange }: Props) {
   return (
-    <nav className="z-10 shrink-0 bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_12px_rgba(0,0,0,0.45)]">
+    <nav className="z-10 shrink-0 bg-surface shadow-[0_-2px_12px_rgba(0,0,0,0.45)]">
       <div className="flex h-16 items-center justify-around px-space-md">
         {items.map((item) => {
           const active = item.id === screen

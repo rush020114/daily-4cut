@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, fetchConfig, uploadComic } from '../api'
 import Turnstile from '../components/Turnstile'
+import { UPLOAD_CONSENT_ITEMS } from '../legal/constants'
 import { track } from '../lib/analytics'
 import { formatReport, STAGE_LABEL, type ErrorReport, type Stage } from '../lib/diagnostics'
 import { ACCEPTED_TYPES, LIMITS, TERMS_VERSION } from '../lib/limits'
@@ -347,11 +348,7 @@ export default function UploadScreen({ onBack }: Props) {
         <fieldset className="flex flex-col gap-space-sm rounded-xl bg-surface-container p-space-md">
           <legend className="sr-only">업로드 약관</legend>
           <ul className="flex list-none flex-col gap-1.5 font-body text-body-sm text-on-surface-variant">
-            {[
-              '내가 만들었거나 사용할 권리가 있는 작품입니다. AI 도구로 만든 경우 그 도구의 이용약관이 허용하는 범위에서 올립니다.',
-              '선정적·폭력적·혐오·불법 콘텐츠와 타인의 저작권을 침해하는 그림은 올리지 않으며, 어기면 숨김 처리될 수 있습니다.',
-              '저작권은 작가(나)에게 있고, 서비스는 이 만화를 보여주기 위한 권한만 가집니다.',
-            ].map((text) => (
+            {UPLOAD_CONSENT_ITEMS.map((text) => (
               <li key={text} className="flex items-start gap-1.5">
                 <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-secondary" />
                 <span>{text}</span>
@@ -368,6 +365,17 @@ export default function UploadScreen({ onBack }: Props) {
             위 내용에 동의합니다
             <span className="font-label-sm text-label-sm text-primary">*필수</span>
           </label>
+          <p className="font-body text-body-sm text-on-surface-variant">
+            올리면 닉네임과 (입력했다면) 이메일, 만화 이미지가 저장돼요. 자세한 내용은{' '}
+            <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
+              개인정보처리방침
+            </a>
+            과{' '}
+            <a href="/terms" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
+              이용약관
+            </a>
+            에서 확인할 수 있어요.
+          </p>
         </fieldset>
 
         {siteKey ? (
