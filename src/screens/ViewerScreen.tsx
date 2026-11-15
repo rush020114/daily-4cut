@@ -6,6 +6,18 @@ import { useVerticalPager, type PageMethod } from '../lib/useVerticalPager'
 
 type Burst = { id: number; x: number; y: number }
 
+// 서버가 홈 HTML 에 미리 넣어 준 만화 목록. 있으면 /api/comics 응답을 기다리지 않고 바로 그린다.
+declare global {
+  interface Window {
+    __COMICS__?: { comics: Omit<Comic, 'liked'>[] }
+  }
+}
+
+function readEmbedded(): Comic[] | null {
+  const embedded = window.__COMICS__
+  return embedded && Array.isArray(embedded.comics) ? embedded.comics.map((c) => ({ ...c, liked: false })) : null
+}
+
 function formatCount(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 }
@@ -32,7 +44,9 @@ export default function ViewerScreen() {
   const lastTap = useRef(0)
   const burstId = useRef(0)
   const toastTimer = useRef<number | undefined>(undefined)
-  const [comics, setComics] = useState<Comic[] | null>(null)
+  const [comics, setComics] = useState<Comic[] | null>(readEmbedded)
+  const startedWithEmbedded = useRef(comics !== null)
+  const [neighborsReady, setNeighborsReady] = useState(false) // 첫 이미지가 도착한 뒤에야 앞뒤 이미지를 받는다
   const [loadError, setLoadError] = useState('')
   const [index, setIndex] = useState(0)
   const [instant, setInstant] = useState(false) // true 인 동안은 넘기는 애니메이션 없이 바로 옮긴다
@@ -50,14 +64,30 @@ export default function ViewerScreen() {
 
   useEffect(() => {
     let cancelled = false
-    fetchComics().then(
+    // 미리 받은 목록으로 이미 그렸다면: 목록과 순서는 그대로 두고, 이 기기의 좋아요 표시와 최신 좋아요 수만 합친다
+    const mergeOnly = attempt === 0 && startedWithEmbedded.current
+    delete window.__COMICS__ // 처음 한 번만 쓴다. 이 화면으로 다시 돌아오면 새로 받는다
+    fetchComics(attempt > 0).then(
       (list) => {
         if (cancelled) return
+        if (mergeOnly) {
+          const byId = new Map(list.map((c) => [c.id, c]))
+          setComics(
+            (prev) =>
+              prev?.map((c) => {
+                const fresh = byId.get(c.id)
+                return fresh ? { ...c, liked: fresh.liked, likeCount: fresh.likeCount } : c
+              }) ?? prev,
+          )
+          return
+        }
         setComics(list)
         setIndex(0)
       },
       (e: unknown) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : '만화를 불러오지 못했어요.')
+        if (cancelled) return
+        if (mergeOnly) showToast('좋아요 표시를 불러오지 못했어요. 아래로 당겨서 새로고침해 보세요.')
+        else setLoadError(e instanceof Error ? e.message : '만화를 불러오지 못했어요.')
       },
     )
     return () => {
@@ -77,7 +107,7 @@ export default function ViewerScreen() {
   // 실패하면 화면의 기존 내용은 그대로 두고 이유만 알려 준다.
   async function refresh() {
     try {
-      const list = await fetchComics()
+      const list = await fetchComics(true) // 캐시를 건너뛰고 최신으로
       setComics(list)
       setIndex(0)
     } catch (e) {
@@ -261,13 +291,16 @@ export default function ViewerScreen() {
                 className="relative w-full overflow-hidden bg-surface-container-lowest"
                 style={{ height: `${100 / count}%` }}
               >
-                {/* 앞뒤 한 편씩만 미리 불러온다 */}
-                {Math.abs(i - index) <= 1 && (
+                {/* 현재 편은 가장 먼저, 앞뒤 한 편은 현재 편이 도착한 뒤에 미리 불러온다 */}
+                {Math.abs(i - index) <= 1 && (i === index || neighborsReady) && (
                   <img
                     src={c.imageUrl}
                     alt={`오늘의 4컷 만화 ${i + 1}`}
                     draggable={false}
                     decoding="async"
+                    fetchPriority={i === index ? 'high' : 'low'}
+                    onLoad={() => setNeighborsReady(true)}
+                    onError={() => setNeighborsReady(true)}
                     className="pointer-events-none block h-full w-full object-contain"
                   />
                 )}

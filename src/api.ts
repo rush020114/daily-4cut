@@ -54,7 +54,13 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   return body as T
 }
 
-export const fetchComics = () => request<{ comics: Comic[] }>('/api/comics').then((r) => r.comics)
+// fresh: 서버가 짧게 보관해 둔 목록을 건너뛰고 최신으로 받는다 (당겨서 새로고침, 다시 불러오기)
+export const fetchComics = (fresh = false) =>
+  request<{ comics?: Comic[] }>(fresh ? '/api/comics?fresh=1' : '/api/comics').then((r) => {
+    // 서버가 목록이 아닌 응답을 주면 빈 화면이 되지 않도록 오류로 처리한다
+    if (!Array.isArray(r.comics)) throw new ApiError(0, '만화 목록을 읽지 못했어요. 잠시 후 다시 시도해 주세요.')
+    return r.comics
+  })
 
 export const setLike = (id: string, like: boolean) =>
   request<{ liked: boolean; likeCount: number }>(`/api/comics/${id}/like`, {
