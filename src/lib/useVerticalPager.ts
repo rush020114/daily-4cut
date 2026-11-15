@@ -18,6 +18,8 @@ const PULL_TRIGGER = 56 // px
 const PULL_MAX = 96 // px
 const PULL_HOLD = 48 // px. 불러오는 동안 머무는 위치
 
+export type PageMethod = 'touch' | 'wheel' | 'key'
+
 type Mode = 'idle' | 'pull' | 'drag' | 'ignore'
 type Gesture = {
   x: number
@@ -30,7 +32,7 @@ type Gesture = {
 type Options = {
   count: number
   index: number
-  onIndexChange: (next: number) => void
+  onIndexChange: (next: number, method: PageMethod) => void
   onRefresh: () => Promise<void>
   enabled: boolean
 }
@@ -63,7 +65,7 @@ export function useVerticalPager(options: Options) {
 
   // 한 편 넘긴다. 잠겨 있거나 끝이면 아무것도 하지 않고 false.
   // 읽는 값이 모두 ref 라서 어느 렌더에서 만들어졌든 같게 동작한다.
-  const go = useCallback((dir: 1 | -1): boolean => {
+  const go = useCallback((dir: 1 | -1, method: PageMethod): boolean => {
     const o = opts.current
     const next = o.index + dir
     if (!o.enabled || locked.current || refreshing.current || next < 0 || next >= o.count) return false
@@ -71,7 +73,7 @@ export function useVerticalPager(options: Options) {
     window.setTimeout(() => {
       locked.current = false
     }, PAGE_LOCK_MS)
-    o.onIndexChange(next)
+    o.onIndexChange(next, method)
     return true
   }, [])
 
@@ -100,7 +102,7 @@ export function useVerticalPager(options: Options) {
         const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1
         acc += e.deltaY * unit
         if (Math.abs(acc) >= WHEEL_STEP) {
-          if (go(acc > 0 ? 1 : -1)) consumed = true // 같은 동작의 남은 관성 이벤트는 무시
+          if (go(acc > 0 ? 1 : -1, 'wheel')) consumed = true // 같은 동작의 남은 관성 이벤트는 무시
           acc = 0
         }
       }
@@ -121,7 +123,7 @@ export function useVerticalPager(options: Options) {
       if (!opts.current.enabled) return
       e.preventDefault()
       if (e.repeat) return
-      go(dir)
+      go(dir, 'key')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -156,7 +158,7 @@ export function useVerticalPager(options: Options) {
     const height = viewport.current?.clientHeight ?? 600
     const far = Math.abs(dy) >= Math.min(height * SWIPE_RATIO, SWIPE_MAX)
     const flick = Math.abs(velocity) >= FLICK_VELOCITY && Math.abs(dy) >= FLICK_MIN_DISTANCE
-    if (far || flick) go(dy < 0 ? 1 : -1)
+    if (far || flick) go(dy < 0 ? 1 : -1, 'touch')
   }
 
   const handlers = {

@@ -7,6 +7,47 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="theme-color" content="#131315" />
+    <script>
+      // 방문 분석: Google Analytics(GA4) + Microsoft Clarity.
+      // 관리자 화면(/admin)에서는 아무것도 불러오지 않는다. gtag/clarity 함수도 만들지 않아서 이벤트도 기록되지 않는다.
+      (function () {
+        var GA_ID = 'G-9DS3G79485';
+        var CLARITY_ID = 'ze1ppcbdbz';
+        var p = location.pathname;
+        if (p === '/admin' || p.indexOf('/admin/') === 0) return;
+
+        // 함수는 바로 만들어 둔다: 외부 스크립트가 도착하기 전의 이벤트도 쌓였다가 전송된다
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () {
+          window.dataLayer.push(arguments);
+        };
+        window.gtag('js', new Date());
+        window.gtag('config', GA_ID);
+        window.clarity =
+          window.clarity ||
+          function () {
+            (window.clarity.q = window.clarity.q || []).push(arguments);
+          };
+
+        // 외부 스크립트는 화면이 다 그려지고 한가해진 뒤에 불러온다 (PageSpeed 점수를 지키기 위해)
+        function load(src) {
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = src;
+          document.head.appendChild(s);
+        }
+        function start() {
+          load('https://www.googletagmanager.com/gtag/js?id=' + GA_ID);
+          load('https://www.clarity.ms/tag/' + CLARITY_ID);
+        }
+        function whenIdle() {
+          if (window.requestIdleCallback) window.requestIdleCallback(start, { timeout: 3000 });
+          else setTimeout(start, 2000);
+        }
+        if (document.readyState === 'complete') whenIdle();
+        else window.addEventListener('load', whenIdle);
+      })();
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
     <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, fetchConfig, uploadComic } from '../api'
 import Turnstile from '../components/Turnstile'
+import { track } from '../lib/analytics'
 import { formatReport, STAGE_LABEL, type ErrorReport, type Stage } from '../lib/diagnostics'
 import { ACCEPTED_TYPES, LIMITS, TERMS_VERSION } from '../lib/limits'
 import { ImageError, readFileBytes, toWebp, type WebpResult } from '../lib/toWebp'
@@ -87,8 +88,11 @@ export default function UploadScreen({ onBack }: Props) {
       if (seq !== pickSeq.current) return
       setPicked(null)
       if (previewUrl) URL.revokeObjectURL(previewUrl)
+      const stage = e instanceof ImageError ? e.stage : 'decode'
       if (e instanceof ImageError) fail(e.message, e.stage, e.detail)
       else fail('이미지를 준비하지 못했어요. 다른 이미지로 시도해 주세요.', 'decode', String(e))
+      // 어느 단계에서 막히는지만 센다. 파일 이름·내용·기기 정보(detail)는 보내지 않는다.
+      track('comic_upload_error', { stage, status: 0, code: 'image_prepare' })
     } finally {
       if (seq === pickSeq.current) setConverting(false)
     }
@@ -114,6 +118,12 @@ export default function UploadScreen({ onBack }: Props) {
     try {
       await uploadComic(form)
       setDone(true)
+      track('comic_upload', {
+        width: picked.webp.width,
+        height: picked.webp.height,
+        size_kb: Math.round(picked.webp.blob.size / 1024),
+        has_email: email.trim() !== '',
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : '업로드하지 못했어요. 잠시 후 다시 시도해 주세요.'
       const detail =
@@ -121,6 +131,11 @@ export default function UploadScreen({ onBack }: Props) {
           ? `HTTP ${err.status} ${String(err.body?.error ?? '')} | webp=${picked.webp.blob.size}B ${picked.webp.width}x${picked.webp.height}`
           : String(err)
       fail(message, 'upload', detail)
+      track('comic_upload_error', {
+        stage: 'upload',
+        status: err instanceof ApiError ? err.status : 0,
+        code: err instanceof ApiError ? String(err.body?.error ?? '') : 'network',
+      })
     } finally {
       // 봇 확인 토큰은 한 번만 쓸 수 있어서 결과와 상관없이 새로 받는다
       setCaptchaToken(null)
@@ -315,6 +330,8 @@ export default function UploadScreen({ onBack }: Props) {
           </label>
           <input
             id="contact-email"
+            // Clarity 화면 녹화에서 이메일 입력값을 가린다
+            data-clarity-mask="True"
             type="email"
             inputMode="email"
             autoComplete="email"

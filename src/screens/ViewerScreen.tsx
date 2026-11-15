@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, fetchComics, reportComic, setLike as saveLike, type Comic, type ReportReason } from '../api'
 import ReportSheet from '../components/ReportSheet'
-import { useVerticalPager } from '../lib/useVerticalPager'
+import { track } from '../lib/analytics'
+import { useVerticalPager, type PageMethod } from '../lib/useVerticalPager'
 
 type Burst = { id: number; x: number; y: number }
 
@@ -84,6 +85,19 @@ export default function ViewerScreen() {
     }
   }
 
+  // 손가락·휠·키보드로 한 편 넘겼을 때: 화면을 옮기고 GA 이벤트를 남긴다
+  function changeIndex(next: number, method: PageMethod) {
+    track('comic_page', {
+      direction: next > index ? 'next' : 'prev',
+      method,
+      comic_id: comics?.[next]?.id ?? '',
+      position: next + 1,
+      total: comics?.length ?? 0,
+      is_today: next === 0,
+    })
+    setIndex(next)
+  }
+
   const count = comics?.length ?? 0
   const {
     attachViewport,
@@ -99,7 +113,7 @@ export default function ViewerScreen() {
   } = useVerticalPager({
     count,
     index,
-    onIndexChange: setIndex,
+    onIndexChange: changeIndex,
     onRefresh: refresh,
     enabled: count > 0 && !reporting,
   })
@@ -121,7 +135,7 @@ export default function ViewerScreen() {
   const animate = !dragging && !instant && !reduceMotion
 
   // 먼저 화면에 반영하고, 서버가 거절하면 되돌린 뒤 이유를 알려 준다.
-  async function toggleLike(target: Comic, like: boolean) {
+  async function toggleLike(target: Comic, like: boolean, method: 'button' | 'double_tap') {
     if (busy.has(target.id) || target.liked === like) return
     const patch = (liked: boolean, likeCount: number) =>
       setComics((prev) => prev?.map((c) => (c.id === target.id ? { ...c, liked, likeCount } : c)) ?? prev)
@@ -131,6 +145,12 @@ export default function ViewerScreen() {
     try {
       const res = await saveLike(target.id, like)
       patch(res.liked, res.likeCount)
+      track('comic_like', {
+        action: like ? 'like' : 'unlike',
+        method,
+        comic_id: target.id,
+        position: comics!.findIndex((c) => c.id === target.id) + 1,
+      })
     } catch (e) {
       if (e instanceof ApiError && typeof e.body?.likeCount === 'number') {
         patch(Boolean(e.body.liked), e.body.likeCount)
@@ -152,6 +172,7 @@ export default function ViewerScreen() {
     try {
       const res = await reportComic(target.id, reason)
       setReporting(false)
+      track('comic_report', { reason, comic_id: target.id, hidden: res.hidden })
       if (res.hidden) {
         const at = comics!.findIndex((c) => c.id === target.id)
         const list = comics!.filter((c) => c.id !== target.id)
@@ -184,7 +205,7 @@ export default function ViewerScreen() {
     lastTap.current = now
     if (gap > 0 && gap < 300) {
       const rect = e.currentTarget.getBoundingClientRect()
-      void toggleLike(comic, true)
+      void toggleLike(comic, true, 'double_tap')
       spawnBurst(e.clientX - rect.left, e.clientY - rect.top)
     }
   }
@@ -314,7 +335,7 @@ export default function ViewerScreen() {
             type="button"
             aria-label="좋아요"
             aria-pressed={comic.liked}
-            onClick={() => void toggleLike(comic, !comic.liked)}
+            onClick={() => void toggleLike(comic, !comic.liked, 'button')}
             className={`flex items-center gap-1.5 rounded-full py-2 pr-4 pl-3 text-on-surface transition active:scale-95 ${
               comic.liked ? 'bg-surface-container-highest' : 'bg-surface-container-high'
             }`}

@@ -1,4 +1,4 @@
-import { json, type Env } from '../_lib/env'
+import { json, type Env } from '../../_lib/env'
 
 type Check = { ok: boolean; error?: string }
 
@@ -11,7 +11,7 @@ async function check(fn: () => Promise<void>): Promise<Check> {
   }
 }
 
-// 배포 설정 확인용. 값은 절대 내보내지 않고, 있는지와 연결되는지만 알려 준다.
+// 배포 설정 확인용 (/api/admin/health, 관리자만). 값은 절대 내보내지 않고, 있는지와 연결되는지만 알려 준다.
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const configured = {
     COMIC_BUCKET: Boolean(env.COMIC_BUCKET),
