@@ -27,6 +27,8 @@ export default function UploadScreen({ onBack }: Props) {
   const [email, setEmail] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState<ErrorReport | null>(null)
+  const [imageError, setImageError] = useState<ErrorReport | null>(null) // 이미지 칸 바로 아래에 보이는 오류
+  const imageErrorRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
@@ -62,10 +64,13 @@ export default function UploadScreen({ onBack }: Props) {
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [error])
+  useEffect(() => {
+    if (imageError) imageErrorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [imageError])
 
   // 끌어다 놓기가 쓸 최신 상태와 동작 (창 전체 이벤트는 한 번만 붙이므로 ref 로 최신 값을 읽는다)
   useEffect(() => {
-    blockedRef.current = submitting || done
+    blockedRef.current = submitting || done || pickerOpen
     dropRef.current = (files) => {
       if (!files[0]) return
       void handleFile(files[0])
@@ -151,10 +156,15 @@ export default function UploadScreen({ onBack }: Props) {
     setCopied(false)
     setError({ message, stage, detail })
   }, [])
+  const failImage = useCallback((message: string, stage: Stage, detail = '') => {
+    setCopied(false)
+    setImageError({ message, stage, detail })
+  }, [])
   const onCaptchaError = useCallback((message: string) => fail(message, 'captcha', 'turnstile widget'), [fail])
 
   async function handleFile(file: File) {
     setError(null)
+    setImageError(null)
     setDropNotice('')
     setPickerOpen(false)
     // 먼저 파일 내용을 메모리로 복사한다. (안드로이드에서는 고른 파일 참조가 나중에 읽히지 않는 경우가 있다)
@@ -181,8 +191,8 @@ export default function UploadScreen({ onBack }: Props) {
       setPicked(null)
       if (previewUrl) URL.revokeObjectURL(previewUrl)
       const stage = e instanceof ImageError ? e.stage : 'decode'
-      if (e instanceof ImageError) fail(e.message, e.stage, e.detail)
-      else fail('이미지를 준비하지 못했어요. 다른 이미지로 시도해 주세요.', 'decode', String(e))
+      if (e instanceof ImageError) failImage(e.message, e.stage, e.detail)
+      else failImage('이미지를 준비하지 못했어요. 다른 이미지로 시도해 주세요.', 'decode', String(e))
       // 어느 단계에서 막히는지만 센다. 파일 이름·내용·기기 정보(detail)는 보내지 않는다.
       track('comic_upload_error', { stage, status: 0, code: 'image_prepare' })
     } finally {
@@ -193,8 +203,9 @@ export default function UploadScreen({ onBack }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setImageError(null)
     if (!picked?.webp) {
-      return fail(converting ? '이미지를 준비하는 중이에요. 잠시만 기다려 주세요.' : '4컷 만화 이미지를 먼저 선택해 주세요.', 'check', 'no image')
+      return failImage(converting ? '이미지를 준비하는 중이에요. 잠시만 기다려 주세요.' : '4컷 만화 이미지를 먼저 선택해 주세요.', 'check', 'no image')
     }
     if (!agreed) return fail('약관에 동의해야 올릴 수 있어요.', 'check', 'terms not checked')
     if (!captchaToken) return fail('봇이 아닌지 확인하는 중이에요. 잠시 후 다시 눌러 주세요.', 'captcha', 'no token yet')
@@ -243,10 +254,9 @@ export default function UploadScreen({ onBack }: Props) {
     inputRef.current?.click()
   }
 
-  async function copyReport() {
-    if (!error) return
+  async function copyReport(report: ErrorReport) {
     try {
-      await navigator.clipboard.writeText(formatReport(error))
+      await navigator.clipboard.writeText(formatReport(report))
       setCopied(true)
     } catch {
       setCopied(false)
@@ -259,12 +269,14 @@ export default function UploadScreen({ onBack }: Props) {
     setConverting(false)
     setPicked(null)
     setError(null)
+    setImageError(null)
     setDropNotice('')
     if (inputRef.current) inputRef.current.value = ''
   }
 
   function reset() {
     setPicked(null)
+    setImageError(null)
     setNickname('')
     setEmail('')
     setAgreed(false)
@@ -304,6 +316,33 @@ export default function UploadScreen({ onBack }: Props) {
 
   const busy = converting || submitting
 
+  const errorBox = (report: ErrorReport, boxRef: React.RefObject<HTMLDivElement | null>) => (
+    <div
+      ref={boxRef}
+      role="alert"
+      className="flex flex-col gap-2 rounded-lg bg-error-container/40 px-space-md py-2 font-body text-body-sm text-on-error-container"
+    >
+      <p className="flex items-start gap-1.5">
+        <span className="material-symbols-outlined text-base">error</span>
+        <span>
+          {report.message}
+          <span className="mt-0.5 block font-label-sm text-label-sm opacity-80">실패한 단계: {STAGE_LABEL[report.stage]}</span>
+        </span>
+      </p>
+      <details className="font-label-sm text-label-sm opacity-90">
+        <summary className="cursor-pointer">자세한 정보</summary>
+        <p className="mt-1 font-mono break-all whitespace-pre-wrap">{formatReport(report)}</p>
+        <button
+          type="button"
+          onClick={() => void copyReport(report)}
+          className="mt-1.5 rounded bg-surface-container-highest px-2 py-1 text-on-surface"
+        >
+          {copied ? '복사했어요' : '복사하기'}
+        </button>
+      </details>
+    </div>
+  )
+
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto px-margin pb-space-xl">
       {/* 파일을 끌어다 화면 위에 올려 둔 동안 보이는 안내. 놓는 일은 창 전체가 받는다 */}
@@ -317,22 +356,8 @@ export default function UploadScreen({ onBack }: Props) {
         </div>
       )}
 
-      {/* 파일 선택 창이 떠 있는 동안: 다른 곳을 누르지 못하게 화면을 덮는다. (끌어다 놓기는 창이 뜨지 않으므로 해당 없음) */}
-      {pickerOpen && (
-        <div role="dialog" aria-modal="true" aria-label="파일 선택 중" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-margin">
-          <div className="flex w-full max-w-[320px] flex-col items-center gap-3 rounded-2xl bg-surface-container-high px-space-xl py-space-lg text-center shadow-2xl">
-            <span className="material-symbols-outlined text-4xl text-primary-container">add_photo_alternate</span>
-            <p className="font-headline text-headline-sm text-on-surface">파일 선택 창에서 이미지를 골라 주세요</p>
-            <button
-              type="button"
-              onClick={() => setPickerOpen(false)}
-              className="rounded-lg bg-surface-container-highest px-space-md py-2 font-label-lg text-label-lg text-on-surface transition active:scale-95 hover:bg-surface-bright"
-            >
-              선택 취소
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 파일 선택 창이 떠 있는 동안: 보이지 않는 덮개로 뒤쪽 클릭만 막는다. 눌러도 덮개만 걷힌다(창이 이미 닫힌 경우 대비) */}
+      {pickerOpen && <div aria-hidden onClick={() => setPickerOpen(false)} className="fixed inset-0 z-50" />}
 
       <button
         type="button"
@@ -441,6 +466,7 @@ export default function UploadScreen({ onBack }: Props) {
               </button>
             </div>
           </div>
+          {imageError && errorBox(imageError, imageErrorRef)}
           <p className="font-body text-body-sm text-on-surface-variant">세로 9:16 한 장을 추천해요. 휴대폰에서 가장 크게 보여요.</p>
           {dropNotice && (
             <p role="status" className="font-body text-body-sm text-secondary-fixed">
@@ -543,32 +569,7 @@ export default function UploadScreen({ onBack }: Props) {
           )
         )}
 
-        {error && (
-          <div
-            ref={errorRef}
-            role="alert"
-            className="flex flex-col gap-2 rounded-lg bg-error-container/40 px-space-md py-2 font-body text-body-sm text-on-error-container"
-          >
-            <p className="flex items-start gap-1.5">
-              <span className="material-symbols-outlined text-base">error</span>
-              <span>
-                {error.message}
-                <span className="mt-0.5 block font-label-sm text-label-sm opacity-80">실패한 단계: {STAGE_LABEL[error.stage]}</span>
-              </span>
-            </p>
-            <details className="font-label-sm text-label-sm opacity-90">
-              <summary className="cursor-pointer">자세한 정보</summary>
-              <p className="mt-1 font-mono break-all whitespace-pre-wrap">{formatReport(error)}</p>
-              <button
-                type="button"
-                onClick={() => void copyReport()}
-                className="mt-1.5 rounded bg-surface-container-highest px-2 py-1 text-on-surface"
-              >
-                {copied ? '복사했어요' : '복사하기'}
-              </button>
-            </details>
-          </div>
-        )}
+        {error && errorBox(error, errorRef)}
 
         <div className="flex flex-col gap-space-xs pt-space-xs">
           <button
