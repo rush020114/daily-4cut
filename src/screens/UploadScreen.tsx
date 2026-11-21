@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { ApiError, fetchConfig, uploadComic } from '../api'
 import Turnstile from '../components/Turnstile'
 import { UPLOAD_CONSENT_ITEMS } from '../legal/constants'
@@ -32,6 +31,7 @@ export default function UploadScreen({ onBack }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [dragOver, setDragOver] = useState(false) // 파일을 끌어다 화면 위에 올려 둔 동안
+  const [pickerOpen, setPickerOpen] = useState(false) // 윈도우 파일 선택 창이 열려 있는 동안
   const [dropNotice, setDropNotice] = useState('')
   const blockedRef = useRef(false) // 올리는 중이거나 완료 화면이면 끌어다 놓기를 받지 않는다
   const dropRef = useRef<(files: File[]) => void>(() => {})
@@ -121,19 +121,31 @@ export default function UploadScreen({ onBack }: Props) {
     }
   }, [])
 
-  // 올리는 중에는 뒤쪽 화면을 누르거나 키보드로 옮겨 다니지 못하게 막고, 실수로 탭을 닫으려 하면 확인을 받는다.
-  // (inert: 클릭·키보드·화면 읽기 프로그램 모두에서 뒤쪽 화면을 잠근다)
+  // 파일 선택 창이 열려 있는 동안 화면을 덮어 다른 곳을 누르지 못하게 하고, 창이 닫히면(취소 포함) 덮개를 걷는다.
+  // 파일을 고르면 handleFile 이 걷고, 취소하면 input 의 cancel 이벤트나 창으로 돌아오는 순간(focus)에 걷는다.
   useEffect(() => {
-    if (!submitting) return
-    const root = document.getElementById('root')
-    root?.setAttribute('inert', '')
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
-    window.addEventListener('beforeunload', warn)
-    return () => {
-      root?.removeAttribute('inert')
-      window.removeEventListener('beforeunload', warn)
+    if (!pickerOpen) return
+    const input = inputRef.current
+    const close = () => setPickerOpen(false)
+    let timer: number | undefined
+    // 고른 파일의 change 가 먼저 오면 이미 닫혀 있다. 아무 일 없이 돌아왔다면 취소로 본다.
+    const onFocus = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(close, 800)
     }
-  }, [submitting])
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    input?.addEventListener('cancel', close)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(timer)
+      input?.removeEventListener('cancel', close)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [pickerOpen])
 
   const fail = useCallback((message: string, stage: Stage, detail = '') => {
     setCopied(false)
@@ -144,6 +156,7 @@ export default function UploadScreen({ onBack }: Props) {
   async function handleFile(file: File) {
     setError(null)
     setDropNotice('')
+    setPickerOpen(false)
     // 먼저 파일 내용을 메모리로 복사한다. (안드로이드에서는 고른 파일 참조가 나중에 읽히지 않는 경우가 있다)
     const seq = ++pickSeq.current
     setConverting(true)
@@ -226,6 +239,7 @@ export default function UploadScreen({ onBack }: Props) {
   // 같은 파일을 다시 골라도 change 가 일어나도록, 열기 직전에 이전 선택을 비운다
   function openPicker() {
     if (inputRef.current) inputRef.current.value = ''
+    setPickerOpen(true)
     inputRef.current?.click()
   }
 
@@ -237,6 +251,16 @@ export default function UploadScreen({ onBack }: Props) {
     } catch {
       setCopied(false)
     }
+  }
+
+  // 고른 이미지를 빼고 처음 상태로 돌아간다. 변환 중이면 그것도 멈춘다.
+  function removeImage() {
+    pickSeq.current++
+    setConverting(false)
+    setPicked(null)
+    setError(null)
+    setDropNotice('')
+    if (inputRef.current) inputRef.current.value = ''
   }
 
   function reset() {
@@ -293,25 +317,22 @@ export default function UploadScreen({ onBack }: Props) {
         </div>
       )}
 
-      {/* 올리는 중: 화면 전체를 덮어서 다른 곳을 누르지 못하게 한다 (뒤쪽 화면은 inert 로 잠긴다) */}
-      {submitting &&
-        createPortal(
-          <div
-            ref={(el) => el?.focus()}
-            role="alertdialog"
-            aria-modal="true"
-            aria-label="올리는 중"
-            tabIndex={-1}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-margin outline-none"
-          >
-            <div className="flex w-full max-w-[320px] flex-col items-center gap-3 rounded-2xl bg-surface-container-high px-space-xl py-space-xl text-center shadow-2xl">
-              <span className="h-9 w-9 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary-container" />
-              <p className="font-headline text-headline-sm text-on-surface">올리는 중이에요</p>
-              <p className="font-body text-body-sm text-on-surface-variant">끝날 때까지 이 창을 닫거나 다른 곳을 누르지 말아 주세요.</p>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {/* 파일 선택 창이 떠 있는 동안: 다른 곳을 누르지 못하게 화면을 덮는다. (끌어다 놓기는 창이 뜨지 않으므로 해당 없음) */}
+      {pickerOpen && (
+        <div role="dialog" aria-modal="true" aria-label="파일 선택 중" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-margin">
+          <div className="flex w-full max-w-[320px] flex-col items-center gap-3 rounded-2xl bg-surface-container-high px-space-xl py-space-lg text-center shadow-2xl">
+            <span className="material-symbols-outlined text-4xl text-primary-container">add_photo_alternate</span>
+            <p className="font-headline text-headline-sm text-on-surface">파일 선택 창에서 이미지를 골라 주세요</p>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(false)}
+              className="rounded-lg bg-surface-container-highest px-space-md py-2 font-label-lg text-label-lg text-on-surface transition active:scale-95 hover:bg-surface-bright"
+            >
+              선택 취소
+            </button>
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
@@ -352,6 +373,18 @@ export default function UploadScreen({ onBack }: Props) {
               <div className="flex w-full max-w-[280px] flex-col gap-2 rounded-lg bg-surface-container-lowest p-2 shadow-xl">
                 <div className="relative flex max-h-[50dvh] w-full items-center justify-center overflow-hidden rounded bg-surface-container-highest">
                   <img src={picked.previewUrl} alt="4컷 만화 미리보기" className="max-h-[50dvh] w-full object-contain" />
+                  <button
+                    type="button"
+                    aria-label="이미지 빼기"
+                    title="이미지 빼기"
+                    disabled={submitting}
+                    onClick={removeImage}
+                    className="absolute top-1.5 right-1.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur transition active:scale-90 hover:bg-black/80 disabled:opacity-50"
+                  >
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
                   {converting && (
                     <div role="status" className="absolute inset-0 flex items-center justify-center bg-surface/70 font-label-md text-label-md text-on-surface">
                       이미지 준비 중…
