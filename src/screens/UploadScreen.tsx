@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ApiError, fetchConfig, uploadComic } from '../api'
 import Turnstile from '../components/Turnstile'
 import { UPLOAD_CONSENT_ITEMS } from '../legal/constants'
@@ -30,6 +31,10 @@ export default function UploadScreen({ onBack }: Props) {
   const [copied, setCopied] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const [dragOver, setDragOver] = useState(false) // 파일을 끌어다 화면 위에 올려 둔 동안
+  const [dropNotice, setDropNotice] = useState('')
+  const blockedRef = useRef(false) // 올리는 중이거나 완료 화면이면 끌어다 놓기를 받지 않는다
+  const dropRef = useRef<(files: File[]) => void>(() => {})
 
   const [siteKey, setSiteKey] = useState<string | null | undefined>(undefined)
   const [configError, setConfigError] = useState('')
@@ -58,6 +63,78 @@ export default function UploadScreen({ onBack }: Props) {
     if (error) errorRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [error])
 
+  // 끌어다 놓기가 쓸 최신 상태와 동작 (창 전체 이벤트는 한 번만 붙이므로 ref 로 최신 값을 읽는다)
+  useEffect(() => {
+    blockedRef.current = submitting || done
+    dropRef.current = (files) => {
+      if (!files[0]) return
+      void handleFile(files[0])
+      if (files.length > 1) setDropNotice('여러 장을 놓았어요. 첫 번째 이미지만 올릴 수 있어요.')
+    }
+  })
+
+  // 사진 끌어다 놓기: 화면 어디에 놓아도 올릴 이미지로 선택된다.
+  // 엉뚱한 곳에 놓았을 때 브라우저가 그 사진을 열면서 페이지를 떠나 버리지 않도록 파일 끌기는 항상 이 화면이 받는다.
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
+    let depth = 0
+    const reset = () => {
+      depth = 0
+      setDragOver(false)
+    }
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      depth++
+      if (!blockedRef.current) setDragOver(true)
+    }
+    const onOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = blockedRef.current ? 'none' : 'copy'
+    }
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) setDragOver(false)
+    }
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      reset()
+      if (!blockedRef.current) dropRef.current(Array.from(e.dataTransfer?.files ?? []))
+    }
+    window.addEventListener('dragenter', onEnter)
+    window.addEventListener('dragover', onOver)
+    window.addEventListener('dragleave', onLeave)
+    window.addEventListener('drop', onDrop)
+    // 끌기가 끝났는데 안내가 남아 있는 경우를 대비한다 (끄는 동안에는 마우스 움직임 이벤트가 오지 않는다)
+    window.addEventListener('mousemove', reset)
+    window.addEventListener('keydown', reset)
+    return () => {
+      window.removeEventListener('dragenter', onEnter)
+      window.removeEventListener('dragover', onOver)
+      window.removeEventListener('dragleave', onLeave)
+      window.removeEventListener('drop', onDrop)
+      window.removeEventListener('mousemove', reset)
+      window.removeEventListener('keydown', reset)
+    }
+  }, [])
+
+  // 올리는 중에는 뒤쪽 화면을 누르거나 키보드로 옮겨 다니지 못하게 막고, 실수로 탭을 닫으려 하면 확인을 받는다.
+  // (inert: 클릭·키보드·화면 읽기 프로그램 모두에서 뒤쪽 화면을 잠근다)
+  useEffect(() => {
+    if (!submitting) return
+    const root = document.getElementById('root')
+    root?.setAttribute('inert', '')
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => {
+      root?.removeAttribute('inert')
+      window.removeEventListener('beforeunload', warn)
+    }
+  }, [submitting])
+
   const fail = useCallback((message: string, stage: Stage, detail = '') => {
     setCopied(false)
     setError({ message, stage, detail })
@@ -66,6 +143,7 @@ export default function UploadScreen({ onBack }: Props) {
 
   async function handleFile(file: File) {
     setError(null)
+    setDropNotice('')
     // 먼저 파일 내용을 메모리로 복사한다. (안드로이드에서는 고른 파일 참조가 나중에 읽히지 않는 경우가 있다)
     const seq = ++pickSeq.current
     setConverting(true)
@@ -204,6 +282,37 @@ export default function UploadScreen({ onBack }: Props) {
 
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto px-margin pb-space-xl">
+      {/* 파일을 끌어다 화면 위에 올려 둔 동안 보이는 안내. 놓는 일은 창 전체가 받는다 */}
+      {dragOver && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-margin">
+          <div className="flex max-w-[360px] flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary-container bg-surface-container-high px-space-xl py-space-xl text-center">
+            <span className="material-symbols-outlined text-5xl text-primary-container">add_photo_alternate</span>
+            <p className="font-headline text-headline-sm text-on-surface">여기에 놓으면 올릴 이미지로 선택돼요</p>
+            <p className="font-body text-body-sm text-on-surface-variant">JPG, PNG, WebP · 한 장</p>
+          </div>
+        </div>
+      )}
+
+      {/* 올리는 중: 화면 전체를 덮어서 다른 곳을 누르지 못하게 한다 (뒤쪽 화면은 inert 로 잠긴다) */}
+      {submitting &&
+        createPortal(
+          <div
+            ref={(el) => el?.focus()}
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="올리는 중"
+            tabIndex={-1}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-margin outline-none"
+          >
+            <div className="flex w-full max-w-[320px] flex-col items-center gap-3 rounded-2xl bg-surface-container-high px-space-xl py-space-xl text-center shadow-2xl">
+              <span className="h-9 w-9 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary-container" />
+              <p className="font-headline text-headline-sm text-on-surface">올리는 중이에요</p>
+              <p className="font-body text-body-sm text-on-surface-variant">끝날 때까지 이 창을 닫거나 다른 곳을 누르지 말아 주세요.</p>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       <button
         type="button"
         onClick={onBack}
@@ -264,6 +373,8 @@ export default function UploadScreen({ onBack }: Props) {
               >
                 <span className="material-symbols-outlined text-4xl">add_photo_alternate</span>
                 <span className="font-label-md text-label-md">이미지를 선택하세요</span>
+                {/* 마우스가 있는 기기(컴퓨터)에서만 보인다 */}
+                <span className="hidden font-body text-body-sm [@media(hover:hover)]:block">또는 끌어다 놓기</span>
               </button>
             )}
 
@@ -298,13 +409,18 @@ export default function UploadScreen({ onBack }: Props) {
             </div>
           </div>
           <p className="font-body text-body-sm text-on-surface-variant">세로 9:16 한 장을 추천해요. 휴대폰에서 가장 크게 보여요.</p>
+          {dropNotice && (
+            <p role="status" className="font-body text-body-sm text-secondary-fixed">
+              {dropNotice}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label htmlFor="author-nickname" className="flex items-center gap-1.5 font-label-lg text-label-lg text-on-surface">
               <span className="material-symbols-outlined text-base text-secondary">face</span>
-              이름
+              닉네임
               <span className="font-label-sm text-label-sm text-primary">*필수</span>
               <span className="font-label-sm text-label-sm text-on-surface-variant">공개되지 않아요</span>
             </label>
@@ -324,15 +440,16 @@ export default function UploadScreen({ onBack }: Props) {
             className="w-full rounded-lg bg-surface-container-low px-space-md py-3 font-body text-body-md text-on-surface transition-colors placeholder:text-outline-variant focus:bg-surface-container-high focus:outline-none"
           />
           <p id="author-name-help" className="font-body text-body-sm text-on-surface-variant">
-            운영자만 볼 수 있고, 결과 안내 메일의 호칭에 쓰여요. 실명이 아니어도 괜찮아요.
+            운영자만 볼 수 있고, 결과 안내 메일의 호칭에 쓰여요.
           </p>
         </div>
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="contact-email" className="flex items-center gap-1.5 font-label-lg text-label-lg text-on-surface">
             <span className="material-symbols-outlined text-base text-secondary">mail</span>
-            연락받을 이메일
+            이메일
             <span className="font-label-sm text-label-sm text-on-surface-variant">선택</span>
+            <span className="font-label-sm text-label-sm text-on-surface-variant">검수 결과를 메일로 알려 드려요</span>
           </label>
           <input
             id="contact-email"
@@ -347,7 +464,7 @@ export default function UploadScreen({ onBack }: Props) {
             placeholder="name@example.com"
             className="w-full rounded-lg bg-surface-container-low px-space-md py-3 font-body text-body-md text-on-surface transition-colors placeholder:text-outline-variant focus:bg-surface-container-high focus:outline-none"
           />
-          <p className="font-body text-body-sm text-on-surface-variant">비워 두어도 돼요. 입력하면 이 만화에 대한 연락이 필요할 때 사용해요.</p>
+          <p className="font-body text-body-sm text-on-surface-variant">비워 두어도 돼요. 입력하면 검수가 끝났을 때 승인 또는 거절 결과를 메일로 보내 드려요.</p>
         </div>
 
         <fieldset className="flex flex-col gap-space-sm rounded-xl bg-surface-container p-space-md">
@@ -371,7 +488,7 @@ export default function UploadScreen({ onBack }: Props) {
             <span className="font-label-sm text-label-sm text-primary">*필수</span>
           </label>
           <p className="font-body text-body-sm text-on-surface-variant">
-            올리면 이름과 (입력했다면) 이메일, 만화 이미지가 저장돼요. 자세한 내용은{' '}
+            올리면 닉네임과 (입력했다면) 이메일, 만화 이미지가 저장돼요. 자세한 내용은{' '}
             <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
               개인정보처리방침
             </a>

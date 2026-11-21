@@ -35,7 +35,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
   const nickname = String(form.get('nickname') ?? '').trim()
   const hasControlChar = Array.from(nickname).some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127)
   if (!nickname || Array.from(nickname).length > L.nicknameMax || hasControlChar) {
-    return fail(400, 'bad_nickname', `이름을 1~${L.nicknameMax}자로 입력해 주세요.`)
+    return fail(400, 'bad_nickname', `닉네임을 1~${L.nicknameMax}자로 입력해 주세요.`)
   }
   const email = String(form.get('email') ?? '').trim().toLowerCase()
   if (email && (email.length > L.emailMax || !EMAIL.test(email))) {
