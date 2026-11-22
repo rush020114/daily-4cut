@@ -3,7 +3,7 @@ import { ApiError, fetchConfig, uploadComic } from '../api'
 import Turnstile from '../components/Turnstile'
 import { UPLOAD_CONSENT_ITEMS } from '../legal/constants'
 import { track } from '../lib/analytics'
-import { formatReport, STAGE_LABEL, type ErrorReport, type Stage } from '../lib/diagnostics'
+import type { ErrorReport, Stage } from '../lib/diagnostics'
 import { ACCEPTED_TYPES, LIMITS, TERMS_VERSION } from '../lib/limits'
 import { ImageError, readFileBytes, toWebp, type WebpResult } from '../lib/toWebp'
 
@@ -29,7 +29,12 @@ export default function UploadScreen({ onBack }: Props) {
   const [error, setError] = useState<ErrorReport | null>(null)
   const [imageError, setImageError] = useState<ErrorReport | null>(null) // 이미지 칸 바로 아래에 보이는 오류
   const imageErrorRef = useRef<HTMLDivElement>(null)
-  const [copied, setCopied] = useState(false)
+  const [nickError, setNickError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [agreeError, setAgreeError] = useState('')
+  const nickRef = useRef<HTMLInputElement>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const agreeRef = useRef<HTMLInputElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [dragOver, setDragOver] = useState(false) // 파일을 끌어다 화면 위에 올려 둔 동안
@@ -153,11 +158,9 @@ export default function UploadScreen({ onBack }: Props) {
   }, [pickerOpen])
 
   const fail = useCallback((message: string, stage: Stage, detail = '') => {
-    setCopied(false)
     setError({ message, stage, detail })
   }, [])
   const failImage = useCallback((message: string, stage: Stage, detail = '') => {
-    setCopied(false)
     setImageError({ message, stage, detail })
   }, [])
   const onCaptchaError = useCallback((message: string) => fail(message, 'captcha', 'turnstile widget'), [fail])
@@ -207,7 +210,22 @@ export default function UploadScreen({ onBack }: Props) {
     if (!picked?.webp) {
       return failImage(converting ? '이미지를 준비하는 중이에요. 잠시만 기다려 주세요.' : '4컷 만화 이미지를 먼저 선택해 주세요.', 'check', 'no image')
     }
-    if (!agreed) return fail('약관에 동의해야 올릴 수 있어요.', 'check', 'terms not checked')
+    setNickError('')
+    setEmailError('')
+    setAgreeError('')
+    if (Array.from(nickname.trim()).length === 0) {
+      setNickError('닉네임을 입력해 주세요.')
+      return nickRef.current?.focus()
+    }
+    const mail = email.trim()
+    if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+      setEmailError('이메일 형식이 올바르지 않아요. 확인해 주세요.')
+      return emailRef.current?.focus()
+    }
+    if (!agreed) {
+      setAgreeError('약관에 동의해야 올릴 수 있어요.')
+      return agreeRef.current?.focus()
+    }
     if (!captchaToken) return fail('봇이 아닌지 확인하는 중이에요. 잠시 후 다시 눌러 주세요.', 'captcha', 'no token yet')
 
     const form = new FormData()
@@ -254,15 +272,6 @@ export default function UploadScreen({ onBack }: Props) {
     inputRef.current?.click()
   }
 
-  async function copyReport(report: ErrorReport) {
-    try {
-      await navigator.clipboard.writeText(formatReport(report))
-      setCopied(true)
-    } catch {
-      setCopied(false)
-    }
-  }
-
   // 고른 이미지를 빼고 처음 상태로 돌아간다. 변환 중이면 그것도 멈춘다.
   function removeImage() {
     pickSeq.current++
@@ -277,6 +286,9 @@ export default function UploadScreen({ onBack }: Props) {
   function reset() {
     setPicked(null)
     setImageError(null)
+    setNickError('')
+    setEmailError('')
+    setAgreeError('')
     setNickname('')
     setEmail('')
     setAgreed(false)
@@ -316,30 +328,14 @@ export default function UploadScreen({ onBack }: Props) {
 
   const busy = converting || submitting
 
-  const errorBox = (report: ErrorReport, boxRef: React.RefObject<HTMLDivElement | null>) => (
+  const msgBox = (message: string, boxRef?: React.RefObject<HTMLDivElement | null>) => (
     <div
       ref={boxRef}
       role="alert"
-      className="flex flex-col gap-2 rounded-lg bg-error-container/40 px-space-md py-2 font-body text-body-sm text-on-error-container"
+      className="flex items-start gap-1.5 rounded-lg bg-error-container/40 px-space-md py-2 font-body text-body-sm text-on-error-container"
     >
-      <p className="flex items-start gap-1.5">
-        <span className="material-symbols-outlined text-base">error</span>
-        <span>
-          {report.message}
-          <span className="mt-0.5 block font-label-sm text-label-sm opacity-80">실패한 단계: {STAGE_LABEL[report.stage]}</span>
-        </span>
-      </p>
-      <details className="font-label-sm text-label-sm opacity-90">
-        <summary className="cursor-pointer">자세한 정보</summary>
-        <p className="mt-1 font-mono break-all whitespace-pre-wrap">{formatReport(report)}</p>
-        <button
-          type="button"
-          onClick={() => void copyReport(report)}
-          className="mt-1.5 rounded bg-surface-container-highest px-2 py-1 text-on-surface"
-        >
-          {copied ? '복사했어요' : '복사하기'}
-        </button>
-      </details>
+      <span className="material-symbols-outlined text-base">error</span>
+      <span>{message}</span>
     </div>
   )
 
@@ -380,7 +376,7 @@ export default function UploadScreen({ onBack }: Props) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-space-lg">
+      <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-space-lg">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 font-label-lg text-label-lg text-on-surface">
@@ -466,7 +462,7 @@ export default function UploadScreen({ onBack }: Props) {
               </button>
             </div>
           </div>
-          {imageError && errorBox(imageError, imageErrorRef)}
+          {imageError && msgBox(imageError.message, imageErrorRef)}
           <p className="font-body text-body-sm text-on-surface-variant">세로 9:16 한 장을 추천해요. 휴대폰에서 가장 크게 보여요.</p>
           {dropNotice && (
             <p role="status" className="font-body text-body-sm text-secondary-fixed">
@@ -489,18 +485,23 @@ export default function UploadScreen({ onBack }: Props) {
           </div>
           <input
             id="author-nickname"
+            ref={nickRef}
             aria-describedby="author-name-help"
+            aria-invalid={nickError !== ''}
             type="text"
-            required
             maxLength={LIMITS.nicknameMax}
             value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
+            onChange={(e) => {
+              setNickname(e.target.value)
+              setNickError('')
+            }}
             placeholder="예) 냥이집사, 공감툰작가"
             className="w-full rounded-lg bg-surface-container-low px-space-md py-3 font-body text-body-md text-on-surface transition-colors placeholder:text-outline-variant focus:bg-surface-container-high focus:outline-none"
           />
           <p id="author-name-help" className="font-body text-body-sm text-on-surface-variant">
             운영자만 볼 수 있고, 결과 안내 메일의 호칭에 쓰여요.
           </p>
+          {nickError && msgBox(nickError)}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -512,6 +513,8 @@ export default function UploadScreen({ onBack }: Props) {
           </label>
           <input
             id="contact-email"
+            ref={emailRef}
+            aria-invalid={emailError !== ''}
             // Clarity 화면 녹화에서 이메일 입력값을 가린다
             data-clarity-mask="True"
             type="email"
@@ -519,11 +522,15 @@ export default function UploadScreen({ onBack }: Props) {
             autoComplete="email"
             maxLength={254}
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              setEmailError('')
+            }}
             placeholder="name@example.com"
             className="w-full rounded-lg bg-surface-container-low px-space-md py-3 font-body text-body-md text-on-surface transition-colors placeholder:text-outline-variant focus:bg-surface-container-high focus:outline-none"
           />
           <p className="font-body text-body-sm text-on-surface-variant">비워 두어도 돼요. 입력하면 검수가 끝났을 때 승인 또는 거절 결과를 메일로 보내 드려요.</p>
+          {emailError && msgBox(emailError)}
         </div>
 
         <fieldset className="flex flex-col gap-space-sm rounded-xl bg-surface-container p-space-md">
@@ -539,13 +546,18 @@ export default function UploadScreen({ onBack }: Props) {
           <label className="flex cursor-pointer items-center gap-2 pt-1 font-label-lg text-label-lg text-on-surface">
             <input
               type="checkbox"
+              ref={agreeRef}
               checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
+              onChange={(e) => {
+                setAgreed(e.target.checked)
+                setAgreeError('')
+              }}
               className="h-5 w-5 shrink-0 accent-primary-container"
             />
             위 내용에 동의합니다
             <span className="font-label-sm text-label-sm text-primary">*필수</span>
           </label>
+          {agreeError && msgBox(agreeError)}
           <p className="font-body text-body-sm text-on-surface-variant">
             올리면 닉네임과 (입력했다면) 이메일, 만화 이미지가 저장돼요. 자세한 내용은{' '}
             <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
@@ -569,7 +581,7 @@ export default function UploadScreen({ onBack }: Props) {
           )
         )}
 
-        {error && errorBox(error, errorRef)}
+        {error && msgBox(error.message, errorRef)}
 
         <div className="flex flex-col gap-space-xs pt-space-xs">
           <button

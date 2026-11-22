@@ -13,6 +13,18 @@ const LegalScreen = lazy(() => import('./screens/LegalScreen'))
 
 export type Screen = 'viewer' | 'upload'
 
+const SCREEN_KEY = 'daily4cut.screen'
+
+// 새로고침해도 보던 탭을 기억한다. 공유 주소(/c/…)로 들어왔을 때는 항상 그 만화를 보여 준다.
+function initialScreen(): Screen {
+  try {
+    if (window.__COMICS__?.sharedId || window.__COMICS__?.notFound) return 'viewer'
+    return sessionStorage.getItem(SCREEN_KEY) === 'upload' ? 'upload' : 'viewer'
+  } catch {
+    return 'viewer'
+  }
+}
+
 function Loading() {
   return (
     <div className="flex flex-1 items-center justify-center" role="status" aria-label="불러오는 중">
@@ -22,7 +34,15 @@ function Loading() {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('viewer')
+  const [screen, setScreenState] = useState<Screen>(initialScreen)
+  const setScreen = (s: Screen) => {
+    setScreenState(s)
+    try {
+      sessionStorage.setItem(SCREEN_KEY, s)
+    } catch {
+      // 저장이 막힌 브라우저에서는 기억만 못 할 뿐 화면은 정상 동작한다
+    }
+  }
   const isAdmin = location.pathname === '/admin' || location.pathname.startsWith('/admin/')
   const legalPage = legalPageFor(location.pathname)
 
@@ -57,7 +77,7 @@ export default function App() {
 
   return (
     <div className="relative mx-auto flex h-dvh w-full max-w-[430px] flex-col overflow-hidden bg-surface">
-      <Header />
+      <Header onHome={() => setScreen('viewer')} />
       <main className="flex min-h-0 flex-1 flex-col">
         {screen === 'viewer' ? (
           <ViewerScreen />
