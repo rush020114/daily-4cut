@@ -134,3 +134,20 @@ body {
 .animate-heart-burst {
   animation: heart-burst 0.65s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
+
+/* 누를 수 있는 것은 손가락 커서로 (Tailwind 기본값은 버튼도 화살표다). 눌러도 반응이 없는 것은 금지 표시 */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  summary,
+  label[for],
+  select:not(:disabled),
+  input:is([type='checkbox'], [type='radio'], [type='file'], [type='range']):not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled,
+  input:disabled {
+    cursor: not-allowed;
+  }
+}
